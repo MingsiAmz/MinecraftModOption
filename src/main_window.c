@@ -440,6 +440,14 @@ GtkWidget *main_window_create(void)
     GtkWidget *b_del    = gtk_button_new_with_label("\xf0\x9f\x97\x91 \xe5\x88\xa0\xe9\x99\xa4");
     GtkWidget *b_set    = gtk_button_new_with_label("\xe2\x9a\x99 \xe8\xae\xbe\xe7\xbd\xae");
 
+    // 为每个按钮设置 CSS name，以便精确覆盖样式
+    gtk_widget_set_name(b_scan,    "btn-scan");
+    gtk_widget_set_name(b_upd_sel, "btn-upd-sel");
+    gtk_widget_set_name(b_upd_all, "btn-upd-all");
+    gtk_widget_set_name(b_roll,    "btn-roll");
+    gtk_widget_set_name(b_del,     "btn-del");
+    gtk_widget_set_name(b_set,     "btn-set");
+
     // 为按钮设置 tooltip（快捷键提示）
     gtk_widget_set_tooltip_text(b_scan, "\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84\xe7\x9b\xae\xe5\xbd\x95 (F5)");
     gtk_widget_set_tooltip_text(b_del, "\xe5\x88\xa0\xe9\x99\xa4\xe5\x8b\xbe\xe9\x80\x89\xe7\x9a\x84\xe6\xa8\xa1\xe7\xbb\x84 (Delete)");
@@ -457,6 +465,7 @@ GtkWidget *main_window_create(void)
 
     /* ─── 搜索/筛选栏 ─── */
     GtkWidget *search_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_name(search_bar, "search-bar");
     gtk_widget_set_margin_start(search_bar, 10);
     gtk_widget_set_margin_end(search_bar, 10);
     gtk_widget_set_margin_top(search_bar, 4);
@@ -466,6 +475,7 @@ GtkWidget *main_window_create(void)
     gtk_box_append(GTK_BOX(search_bar), search_icon);
 
     search_entry = gtk_entry_new();
+    gtk_widget_set_name(search_entry, "search-entry");
     gtk_entry_set_placeholder_text(GTK_ENTRY(search_entry),
         "\xe6\x90\x9c\xe7\xb4\xa2\xe6\xa8\xa1\xe7\xbb\x84\xe5\x90\x8d\xe7\xa7\xb0...");
     gtk_widget_set_hexpand(search_entry, TRUE);
@@ -488,6 +498,7 @@ GtkWidget *main_window_create(void)
 
     /* ─── 列表 ─── */
     GtkWidget *list = mod_list_view_create();
+    gtk_widget_set_name(list, "mod-treeview");
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), list);
     gtk_widget_set_vexpand(scroll, TRUE);
@@ -495,6 +506,7 @@ GtkWidget *main_window_create(void)
 
     /* ─── 进度条 ─── */
     progress_bar = gtk_progress_bar_new();
+    gtk_widget_set_name(progress_bar, "mod-progress");
     gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
     gtk_widget_set_visible(progress_bar, FALSE);
     gtk_widget_set_margin_start(progress_bar, 10);
@@ -505,6 +517,7 @@ GtkWidget *main_window_create(void)
 
     /* ─── 状态栏 ─── */
     GtkWidget *sb = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_name(sb, "status-bar");
     status_bar_label = gtk_label_new("\xe5\xb0\xb1\xe7\xbb\xaa");
     gtk_label_set_xalign(GTK_LABEL(status_bar_label), 0.0);
     gtk_widget_set_margin_start(status_bar_label, 10);

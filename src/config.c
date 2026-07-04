@@ -21,144 +21,213 @@ const char *theme_get_name(ThemeMode theme)
     return "未知";
 }
 
-static const char *theme_css(ThemeMode theme)
+static void theme_apply_css(ThemeMode theme)
 {
+    /* 基础重置：所有主题通用 */
+    const char *base =
+        "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+        "  margin: 2px 3px; padding: 7px 16px; font-size: 13px;"
+        "  border-radius: 6px; border-style: solid; border-width: 1px;"
+        "  font-weight: normal; text-shadow: none; box-shadow: none;"
+        "  background-image: none;"
+        "}"
+        "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+        "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+        "  background-image: none;"
+        "}"
+        "#search-entry {"
+        "  border-radius: 16px; padding: 4px 12px;"
+        "  min-height: 28px; font-size: 13px;"
+        "}"
+        "#mod-treeview { font-size: 13px; border: none; outline: none; }"
+        "#mod-progress { min-height: 22px; border: none; margin: 4px 10px; }"
+        "#mod-progress trough { border-radius: 4px; min-height: 18px; }"
+        "#mod-progress progress { border-radius: 4px; min-height: 18px; }"
+        "#status-bar { padding: 5px 10px; font-size: 12px; }";
+
+    const char *theme_part;
+
     switch (theme) {
     case THEME_LIGHT:
-        return
+        theme_part =
             "window { background-color: #f5f5f7; }"
-            ".toolbar button { background: #ffffff; color: #333;"
-            "  border: 1px solid #d0d0d0; }"
-            ".toolbar button:hover { background: #f0f0f0; }"
-            "treeview { font-size: 13px; }"
-            "statusbar { background: #ffffff; border-top: 1px solid #e0e0e0; }"
-            "progressbar trough { background: #eee; }"
-            "progressbar progress { background: #4a90d9; }";
+            "#toolbar { background: #ffffff; border-bottom: 1px solid #e0e0e0; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #ffffff !important; color: #333333 !important;"
+            "  border-color: #d0d0d0 !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #f0f0f0 !important; border-color: #bbbbbb !important;"
+            "}"
+            "#search-bar { background: #ffffff; padding: 6px 10px; }"
+            "#search-entry { background: #f8f8f8; color: #333; border-color: #ddd; }"
+            "#search-entry:focus { border-color: #4a90d9; background: #fff; }"
+            "#mod-treeview { background: #ffffff; color: #333333; }"
+            "#mod-treeview:selected { background: #e3f0ff; color: #1a1a1a; }"
+            "#mod-treeview:selected:focus { background: #cce5ff; color: #000; }"
+            "#status-bar { background: #ffffff; border-top: 1px solid #e0e0e0; color: #555555; }"
+            "#mod-progress trough { background: #eeeeee; }"
+            "#mod-progress progress { background: #4a90d9; }";
+        break;
 
     case THEME_DARK:
-        return
-            "window { background-color: #1e1e2e; }"
-            ".toolbar { background: #252536; border-bottom: 1px solid #333350; }"
-            ".toolbar button { background: #2d2d44; color: #cdd6f4;"
-            "  border: 1px solid #45456a; }"
-            ".toolbar button:hover { background: #3d3d5c; }"
-            ".search-bar { background: #252536; }"
-            ".search-bar entry { background: #2d2d44; color: #cdd6f4;"
-            "  border: 1px solid #45456a; }"
-            ".search-bar entry:focus { border-color: #89b4fa; }"
-            "treeview { font-size: 13px; background: #1e1e2e; color: #cdd6f4; }"
-            "treeview:selected { background: #45456a; color: #cdd6f4; }"
-            "statusbar { background: #252536; border-top: 1px solid #333350;"
-            "  color: #a6adc8; }"
-            "progressbar trough { background: #333350; }"
-            "progressbar progress { background: #89b4fa; }";
+        theme_part =
+            "window { background-color: #1e1e2e; color: #cdd6f4; }"
+            "#toolbar { background: #252536; border-bottom: 1px solid #333350; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #2d2d44 !important; color: #cdd6f4 !important;"
+            "  border-color: #45456a !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #3d3d5c !important; border-color: #5a5a8a !important;"
+            "}"
+            "#search-bar { background: #252536; padding: 6px 10px; }"
+            "#search-entry { background: #2d2d44; color: #cdd6f4; border-color: #45456a; }"
+            "#search-entry:focus { border-color: #89b4fa; }"
+            "#mod-treeview { background: #1e1e2e; color: #cdd6f4; }"
+            "#mod-treeview:selected { background: #45456a; color: #cdd6f4; }"
+            "#mod-treeview:selected:focus { background: #55557a; color: #fff; }"
+            "#status-bar { background: #252536; border-top: 1px solid #333350; color: #a6adc8; }"
+            "#mod-progress trough { background: #333350; }"
+            "#mod-progress progress { background: #89b4fa; }";
+        break;
 
     case THEME_PRESET_A:
-        return
-            "window { background-color: #1a0f0f; }"
-            ".toolbar { background: #2a1414; border-bottom: 1px solid #4a2020; }"
-            ".toolbar button { background: #3a1a1a; color: #e8c87a;"
-            "  border: 1px solid #6a3030; }"
-            ".toolbar button:hover { background: #4a2828; }"
-            ".search-bar { background: #2a1414; }"
-            ".search-bar entry { background: #3a1a1a; color: #e8c87a;"
-            "  border: 1px solid #6a3030; }"
-            ".search-bar entry:focus { border-color: #e8c87a; }"
-            "treeview { font-size: 13px; background: #1a0f0f; color: #d4b87a; }"
-            "treeview:selected { background: #6a3030; color: #f0d89a; }"
-            "statusbar { background: #2a1414; border-top: 1px solid #4a2020;"
-            "  color: #c4a86a; }"
-            "progressbar trough { background: #4a2020; }"
-            "progressbar progress { background: #e8c87a; }";
+        theme_part =
+            "window { background-color: #1a0f0f; color: #d4b87a; }"
+            "#toolbar { background: #2a1414; border-bottom: 1px solid #4a2020; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #3a1a1a !important; color: #e8c87a !important;"
+            "  border-color: #6a3030 !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #4a2828 !important; border-color: #8a4040 !important;"
+            "}"
+            "#search-bar { background: #2a1414; padding: 6px 10px; }"
+            "#search-entry { background: #3a1a1a; color: #e8c87a; border-color: #6a3030; }"
+            "#search-entry:focus { border-color: #e8c87a; }"
+            "#mod-treeview { background: #1a0f0f; color: #d4b87a; }"
+            "#mod-treeview:selected { background: #6a3030; color: #f0d89a; }"
+            "#status-bar { background: #2a1414; border-top: 1px solid #4a2020; color: #c4a86a; }"
+            "#mod-progress trough { background: #4a2020; }"
+            "#mod-progress progress { background: #e8c87a; }";
+        break;
 
     case THEME_PRESET_B:
-        return
-            "window { background-color: #0f1a0f; }"
-            ".toolbar { background: #162916; border-bottom: 1px solid #2a4a2a; }"
-            ".toolbar button { background: #1e3a1e; color: #a8d8a0;"
-            "  border: 1px solid #3a6a3a; }"
-            ".toolbar button:hover { background: #2a4a2a; }"
-            ".search-bar { background: #162916; }"
-            ".search-bar entry { background: #1e3a1e; color: #a8d8a0;"
-            "  border: 1px solid #3a6a3a; }"
-            ".search-bar entry:focus { border-color: #7acc70; }"
-            "treeview { font-size: 13px; background: #0f1a0f; color: #a8d8a0; }"
-            "treeview:selected { background: #3a6a3a; color: #d0f0c8; }"
-            "statusbar { background: #162916; border-top: 1px solid #2a4a2a;"
-            "  color: #88b880; }"
-            "progressbar trough { background: #2a4a2a; }"
-            "progressbar progress { background: #5ab84a; }";
+        theme_part =
+            "window { background-color: #0f1a0f; color: #a8d8a0; }"
+            "#toolbar { background: #162916; border-bottom: 1px solid #2a4a2a; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #1e3a1e !important; color: #a8d8a0 !important;"
+            "  border-color: #3a6a3a !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #2a4a2a !important; border-color: #4a8a4a !important;"
+            "}"
+            "#search-bar { background: #162916; padding: 6px 10px; }"
+            "#search-entry { background: #1e3a1e; color: #a8d8a0; border-color: #3a6a3a; }"
+            "#search-entry:focus { border-color: #7acc70; }"
+            "#mod-treeview { background: #0f1a0f; color: #a8d8a0; }"
+            "#mod-treeview:selected { background: #3a6a3a; color: #d0f0c8; }"
+            "#status-bar { background: #162916; border-top: 1px solid #2a4a2a; color: #88b880; }"
+            "#mod-progress trough { background: #2a4a2a; }"
+            "#mod-progress progress { background: #5ab84a; }";
+        break;
 
     case THEME_PRESET_C:
-        return
-            "window { background-color: #0f1420; }"
-            ".toolbar { background: #1a2440; border-bottom: 1px solid #2a3a60; }"
-            ".toolbar button { background: #222d50; color: #88c0f0;"
-            "  border: 1px solid #3a4a70; }"
-            ".toolbar button:hover { background: #2a3a60; }"
-            ".search-bar { background: #1a2440; }"
-            ".search-bar entry { background: #222d50; color: #88c0f0;"
-            "  border: 1px solid #3a4a70; }"
-            ".search-bar entry:focus { border-color: #5aa0e0; }"
-            "treeview { font-size: 13px; background: #0f1420; color: #88c0f0; }"
-            "treeview:selected { background: #3a4a70; color: #b0d8ff; }"
-            "statusbar { background: #1a2440; border-top: 1px solid #2a3a60;"
-            "  color: #70a0d0; }"
-            "progressbar trough { background: #2a3a60; }"
-            "progressbar progress { background: #3a7ad0; }";
+        theme_part =
+            "window { background-color: #0f1420; color: #88c0f0; }"
+            "#toolbar { background: #1a2440; border-bottom: 1px solid #2a3a60; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #222d50 !important; color: #88c0f0 !important;"
+            "  border-color: #3a4a70 !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #2a3a60 !important; border-color: #4a6a90 !important;"
+            "}"
+            "#search-bar { background: #1a2440; padding: 6px 10px; }"
+            "#search-entry { background: #222d50; color: #88c0f0; border-color: #3a4a70; }"
+            "#search-entry:focus { border-color: #5aa0e0; }"
+            "#mod-treeview { background: #0f1420; color: #88c0f0; }"
+            "#mod-treeview:selected { background: #3a4a70; color: #b0d8ff; }"
+            "#status-bar { background: #1a2440; border-top: 1px solid #2a3a60; color: #70a0d0; }"
+            "#mod-progress trough { background: #2a3a60; }"
+            "#mod-progress progress { background: #3a7ad0; }";
+        break;
 
     case THEME_PRESET_D:
-        return
-            "window { background-color: #120f1a; }"
-            ".toolbar { background: #201a30; border-bottom: 1px solid #382a50; }"
-            ".toolbar button { background: #2a2240; color: #c8a8e0;"
-            "  border: 1px solid #483a60; }"
-            ".toolbar button:hover { background: #382a50; }"
-            ".search-bar { background: #201a30; }"
-            ".search-bar entry { background: #2a2240; color: #c8a8e0;"
-            "  border: 1px solid #483a60; }"
-            ".search-bar entry:focus { border-color: #b080d8; }"
-            "treeview { font-size: 13px; background: #120f1a; color: #c8a8e0; }"
-            "treeview:selected { background: #483a60; color: #e0c8f8; }"
-            "statusbar { background: #201a30; border-top: 1px solid #382a50;"
-            "  color: #a888c8; }"
-            "progressbar trough { background: #382a50; }"
-            "progressbar progress { background: #9060c8; }";
+        theme_part =
+            "window { background-color: #120f1a; color: #c8a8e0; }"
+            "#toolbar { background: #201a30; border-bottom: 1px solid #382a50; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #2a2240 !important; color: #c8a8e0 !important;"
+            "  border-color: #483a60 !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #382a50 !important; border-color: #685080 !important;"
+            "}"
+            "#search-bar { background: #201a30; padding: 6px 10px; }"
+            "#search-entry { background: #2a2240; color: #c8a8e0; border-color: #483a60; }"
+            "#search-entry:focus { border-color: #b080d8; }"
+            "#mod-treeview { background: #120f1a; color: #c8a8e0; }"
+            "#mod-treeview:selected { background: #483a60; color: #e0c8f8; }"
+            "#status-bar { background: #201a30; border-top: 1px solid #382a50; color: #a888c8; }"
+            "#mod-progress trough { background: #382a50; }"
+            "#mod-progress progress { background: #9060c8; }";
+        break;
 
     default:
     case THEME_SYSTEM:
-        return
+        theme_part =
             "window { background-color: #f5f5f7; }"
-            ".toolbar { background: #ffffff; border-bottom: 1px solid #e0e0e0; padding: 8px; }"
-            ".toolbar button { margin: 2px 3px; padding: 7px 16px; font-size: 13px;"
-            "   border-radius: 6px; border: 1px solid #d0d0d0;"
-            "   background: #ffffff; color: #333; }"
-            ".toolbar button:hover { background: #f0f0f0; border-color: #bbb; }"
-            ".search-bar { background: #ffffff; padding: 6px 10px; }"
-            ".search-bar entry { border-radius: 16px; padding: 4px 12px;"
-            "   border: 1px solid #ddd; background: #f8f8f8;}"
-            ".search-bar entry:focus { border-color: #4a90d9; background: #fff; }"
-            "treeview { font-size: 13px; }"
-            "treeview:selected { background: #e3f0ff; color: #1a1a1a; }"
-            "statusbar { background: #ffffff; border-top: 1px solid #e0e0e0;"
-            "   padding: 5px 10px; font-size: 12px; color: #555; }"
-            "progressbar { min-height: 22px; }"
-            "progressbar trough { border-radius: 4px; background: #eee; }"
-            "progressbar progress { background: #4a90d9;"
-            "   border-radius: 4px; }";
+            "#toolbar { background: #ffffff; border-bottom: 1px solid #e0e0e0; padding: 8px; }"
+            "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
+            "  background: #ffffff !important; color: #333333 !important;"
+            "  border-color: #d0d0d0 !important;"
+            "}"
+            "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
+            "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
+            "  background: #f0f0f0 !important; border-color: #bbbbbb !important;"
+            "}"
+            "#search-bar { background: #ffffff; padding: 6px 10px; }"
+            "#search-entry { background: #f8f8f8; color: #333; border-color: #ddd; }"
+            "#search-entry:focus { border-color: #4a90d9; background: #fff; }"
+            "#mod-treeview { background: #ffffff; color: #333333; }"
+            "#mod-treeview:selected { background: #e3f0ff; color: #1a1a1a; }"
+            "#mod-treeview:selected:focus { background: #cce5ff; color: #000; }"
+            "#status-bar { background: #ffffff; border-top: 1px solid #e0e0e0; color: #555555; }"
+            "#mod-progress trough { background: #eeeeee; }"
+            "#mod-progress progress { background: #4a90d9; }";
+        break;
+    }
+
+    /* 拼接完整 CSS */
+    char *full_css = malloc(strlen(base) + strlen(theme_part) + 1);
+    if (full_css) {
+        strcpy(full_css, theme_part);
+        strcat(full_css, base);
+
+        GtkCssProvider *provider = gtk_css_provider_new();
+        gtk_css_provider_load_from_string(provider, full_css);
+
+        gtk_style_context_add_provider_for_display(
+            gdk_display_get_default(), GTK_STYLE_PROVIDER(provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+        g_object_unref(provider);
+        free(full_css);
     }
 }
 
 void theme_apply(ThemeMode theme)
 {
-    GtkCssProvider *provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_string(provider, theme_css(theme));
-
-    gtk_style_context_add_provider_for_display(
-        gdk_display_get_default(), GTK_STYLE_PROVIDER(provider),
-        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-    g_object_unref(provider);
+    theme_apply_css(theme);
 }
 
 void config_set_defaults(AppConfig *config)
