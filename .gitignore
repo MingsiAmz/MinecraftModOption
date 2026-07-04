@@ -24,4 +24,4 @@ config.json
 
 mods_cache.json
 
-git-auto-commit.bat
+./git-auto-commit.bat
