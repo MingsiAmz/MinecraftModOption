@@ -87,7 +87,6 @@ static void on_settings_save(GtkButton *btn, GtkWindow *dialog)
     GtkWidget *cf_e = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "cf-entry"));
     GtkWidget *auto_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "auto-scan-switch"));
     GtkWidget *backup_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "backup-switch"));
-    GtkWidget *theme_c = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "theme-combo"));
 
     if (mod_dir_e) snprintf(config->mod_dir, sizeof(config->mod_dir), "%s",
         gtk_editable_get_text(GTK_EDITABLE(mod_dir_e)));
@@ -98,13 +97,6 @@ static void on_settings_save(GtkButton *btn, GtkWindow *dialog)
         gtk_editable_get_text(GTK_EDITABLE(cf_e)));
     if (auto_s) config->auto_scan_on_start = gtk_switch_get_active(GTK_SWITCH(auto_s));
     if (backup_s) config->backup_before_update = gtk_switch_get_active(GTK_SWITCH(backup_s));
-    if (theme_c) {
-        guint sel = gtk_drop_down_get_selected(GTK_DROP_DOWN(theme_c));
-        if (sel < THEME_COUNT) {
-            config->theme = (ThemeMode)sel;
-            theme_apply(config->theme);
-        }
-    }
 
     config_save(config);
     gtk_window_destroy(dialog);
@@ -162,26 +154,6 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     gtk_widget_set_name(backup_s, "settings-switch");
     GtkWidget *r6 = add_labeled_row(content_box, "更新前自动备份:", backup_s);
 
-    /* 主题选择 */
-    GtkWidget *theme_lbl = gtk_label_new("🎨 界面主题:");
-    gtk_label_set_xalign(GTK_LABEL(theme_lbl), 1.0);
-    gtk_widget_set_size_request(theme_lbl, 130, -1);
-
-    GtkWidget *theme_combo = gtk_drop_down_new_from_strings(
-        (const char*[]){ "🌗 跟随系统", "☀️ 浅色模式", "🌙 深色模式",
-                         "🔴 暗红金", "🌲 森林绿", "🌊 海洋蓝",
-                         "🟣 暗夜紫", NULL });
-    gtk_widget_set_name(theme_combo, "theme-combo");
-
-    // GTK4 的 drop_down 不能直接设 active，用 selected 属性
-    g_object_set(theme_combo, "selected", (guint)config->theme, NULL);
-
-    GtkWidget *theme_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_append(GTK_BOX(theme_row), theme_lbl);
-    gtk_box_append(GTK_BOX(theme_row), theme_combo);
-    gtk_widget_set_hexpand(theme_combo, TRUE);
-    gtk_box_append(GTK_BOX(content_box), theme_row);
-
     /* 存储控件 */
     g_object_set_data(G_OBJECT(dialog), "config", config);
     g_object_set_data(G_OBJECT(dialog), "mod-dir-entry", mod_dir_e);
@@ -190,7 +162,6 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     g_object_set_data(G_OBJECT(dialog), "cf-entry", cf_e);
     g_object_set_data(G_OBJECT(dialog), "auto-scan-switch", auto_s);
     g_object_set_data(G_OBJECT(dialog), "backup-switch", backup_s);
-    g_object_set_data(G_OBJECT(dialog), "theme-combo", theme_combo);
 
     /* 按钮 */
     GtkWidget *btn_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);

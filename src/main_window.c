@@ -417,10 +417,6 @@ GtkWidget *main_window_create(void)
     gtk_window_set_default_size(GTK_WINDOW(window), 1000, 680);
     gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
 
-    /* ─── 加载配置并应用主题 ─── */
-    AppState *state_init = app_get_state();
-    theme_apply(state_init->config.theme);
-
     /* ─── 主垂直布局 ─── */
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_window_set_child(GTK_WINDOW(window), vbox);
@@ -550,10 +546,6 @@ GtkWidget *main_window_create(void)
 
     /* ─── 初始更新状态 ─── */
     main_window_update_status();
-
-    /* ─── 启动后立即应用已保存的主题样式 ─── */
-    AppState *state = app_get_state();
-    theme_apply(state->config.theme);
 
     return window;
 }
