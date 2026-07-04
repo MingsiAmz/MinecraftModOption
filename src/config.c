@@ -25,25 +25,61 @@ static void theme_apply_css(ThemeMode theme)
 {
     /* 基础重置：所有主题通用 */
     const char *base =
+        /* ─── 按钮子元素（label）也要覆盖 ─── */
         "#btn-scan, #btn-upd-sel, #btn-upd-all, #btn-roll, #btn-del, #btn-set {"
         "  margin: 2px 3px; padding: 7px 16px; font-size: 13px;"
         "  border-radius: 6px; border-style: solid; border-width: 1px;"
         "  font-weight: normal; text-shadow: none; box-shadow: none;"
         "  background-image: none;"
         "}"
+        "#btn-scan label, #btn-upd-sel label, #btn-upd-all label,"
+        "#btn-roll label, #btn-del label, #btn-set label {"
+        "  font-weight: normal; text-shadow: none;"
+        "}"
         "#btn-scan:hover, #btn-upd-sel:hover, #btn-upd-all:hover,"
         "#btn-roll:hover, #btn-del:hover, #btn-set:hover {"
         "  background-image: none;"
         "}"
+        "#btn-scan:hover label, #btn-upd-sel:hover label, #btn-upd-all:hover label,"
+        "#btn-roll:hover label, #btn-del:hover label, #btn-set:hover label {"
+        "  background-image: none;"
+        "}"
+        /* ─── 搜索框 ─── */
         "#search-entry {"
         "  border-radius: 16px; padding: 4px 12px;"
         "  min-height: 28px; font-size: 13px;"
         "}"
+        "#search-entry:placeholder-text { color: inherit; opacity: 0.5; }"
+        /* ─── 模组列表（treeview） ─── */
         "#mod-treeview { font-size: 13px; border: none; outline: none; }"
+        "#mod-treeview cell { border: none; padding: 4px 6px; }"
+        "#mod-treeview cell text { font-size: 13px; }"
+        /* ─── 下拉框 ─── */
+        "#filter-combo, #theme-combo {"
+        "  border-radius: 6px; padding: 2px 8px;"
+        "  min-height: 28px; font-size: 13px;"
+        "}"
+        "#filter-combo dropdown, #theme-combo dropdown {"
+        "  border-radius: 6px; padding: 2px 8px;"
+        "}"
+        "#filter-combo label, #theme-combo label {"
+        "  font-size: 13px;"
+        "}"
+        /* ─── 进度条 ─── */
         "#mod-progress { min-height: 22px; border: none; margin: 4px 10px; }"
         "#mod-progress trough { border-radius: 4px; min-height: 18px; }"
         "#mod-progress progress { border-radius: 4px; min-height: 18px; }"
-        "#status-bar { padding: 5px 10px; font-size: 12px; }";
+        /* ─── 状态栏 ─── */
+        "#status-bar { padding: 5px 10px; font-size: 12px; }"
+        /* ─── 隔条 ─── */
+        "separator { min-width: 1px; min-height: 1px; opacity: 0.3; }"
+        /* ─── 设置对话框组件 ─── */
+        "#settings-dialog entry { border-radius: 4px; padding: 4px 8px; font-size: 13px; }"
+        "#settings-dialog spinbutton { border-radius: 4px; padding: 2px 6px; font-size: 13px; }"
+        "#settings-dialog button { border-radius: 6px; padding: 6px 18px; font-size: 13px; }"
+        "#settings-dialog button label { font-size: 13px; }"
+        "#settings-dialog switch { font-size: 13px; }"
+        "#settings-dialog label { font-size: 13px; }";
 
     const char *theme_part;
 
@@ -71,7 +107,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #ffffff; border-top: 1px solid #e0e0e0; color: #333333; }"
             "#mod-progress trough { background: #eeeeee; }"
             "#mod-progress progress { background: #4a90d9; }"
-            "#mod-progress * { color: #000000; }";
+            "#mod-progress * { color: #000000; }"
+            "#filter-combo, #theme-combo { background: #ffffff; color: #000000; border: 1px solid #d0d0d0; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #bbbbbb; background: #f8f8f8; }"
+            "#settings-dialog { background: #f5f5f7; }"
+            "#settings-dialog label { color: #000000; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #ffffff; color: #000000; border-color: #d0d0d0; }"
+            "#settings-dialog button { background: #ffffff; color: #000000; border: 1px solid #d0d0d0; }"
+            "#settings-dialog button:hover { background: #f0f0f0; }"
+            "#settings-dialog switch { color: #000000; }"
+            "separator { background: #cccccc; }";
         break;
 
     case THEME_DARK:
@@ -97,7 +142,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #252536; border-top: 1px solid #333350; color: #cdd6f4; }"
             "#mod-progress trough { background: #333350; }"
             "#mod-progress progress { background: #89b4fa; }"
-            "#mod-progress * { color: #ffffff; }";
+            "#mod-progress * { color: #ffffff; }"
+            "#filter-combo, #theme-combo { background: #2d2d44; color: #ffffff; border: 1px solid #45456a; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #5a5a8a; background: #363653; }"
+            "#settings-dialog { background: #1e1e2e; }"
+            "#settings-dialog label { color: #ffffff; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #2d2d44; color: #ffffff; border-color: #45456a; }"
+            "#settings-dialog button { background: #2d2d44; color: #ffffff; border: 1px solid #45456a; }"
+            "#settings-dialog button:hover { background: #3d3d5c; }"
+            "#settings-dialog switch { color: #ffffff; }"
+            "separator { background: #45456a; }";
         break;
 
     case THEME_PRESET_A:
@@ -122,7 +176,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #2a1414; border-top: 1px solid #4a2020; color: #c4a86a; }"
             "#mod-progress trough { background: #4a2020; }"
             "#mod-progress progress { background: #e8c87a; }"
-            "#mod-progress * { color: #1a0f0f; }";
+            "#mod-progress * { color: #1a0f0f; }"
+            "#filter-combo, #theme-combo { background: #3a1a1a; color: #e8c87a; border: 1px solid #6a3030; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #8a4040; background: #4a2828; }"
+            "#settings-dialog { background: #1a0f0f; }"
+            "#settings-dialog label { color: #e8c87a; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #3a1a1a; color: #e8c87a; border-color: #6a3030; }"
+            "#settings-dialog button { background: #3a1a1a; color: #e8c87a; border: 1px solid #6a3030; }"
+            "#settings-dialog button:hover { background: #4a2828; }"
+            "#settings-dialog switch { color: #e8c87a; }"
+            "separator { background: #6a3030; }";
         break;
 
     case THEME_PRESET_B:
@@ -147,7 +210,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #162916; border-top: 1px solid #2a4a2a; color: #88b880; }"
             "#mod-progress trough { background: #2a4a2a; }"
             "#mod-progress progress { background: #5ab84a; }"
-            "#mod-progress * { color: #0f1a0f; }";
+            "#mod-progress * { color: #0f1a0f; }"
+            "#filter-combo, #theme-combo { background: #1e3a1e; color: #a8d8a0; border: 1px solid #3a6a3a; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #4a8a4a; background: #2a4a2a; }"
+            "#settings-dialog { background: #0f1a0f; }"
+            "#settings-dialog label { color: #a8d8a0; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #1e3a1e; color: #a8d8a0; border-color: #3a6a3a; }"
+            "#settings-dialog button { background: #1e3a1e; color: #a8d8a0; border: 1px solid #3a6a3a; }"
+            "#settings-dialog button:hover { background: #2a4a2a; }"
+            "#settings-dialog switch { color: #a8d8a0; }"
+            "separator { background: #3a6a3a; }";
         break;
 
     case THEME_PRESET_C:
@@ -172,7 +244,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #1a2440; border-top: 1px solid #2a3a60; color: #70a0d0; }"
             "#mod-progress trough { background: #2a3a60; }"
             "#mod-progress progress { background: #3a7ad0; }"
-            "#mod-progress * { color: #0f1420; }";
+            "#mod-progress * { color: #0f1420; }"
+            "#filter-combo, #theme-combo { background: #222d50; color: #88c0f0; border: 1px solid #3a4a70; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #4a6a90; background: #2a3a60; }"
+            "#settings-dialog { background: #0f1420; }"
+            "#settings-dialog label { color: #88c0f0; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #222d50; color: #88c0f0; border-color: #3a4a70; }"
+            "#settings-dialog button { background: #222d50; color: #88c0f0; border: 1px solid #3a4a70; }"
+            "#settings-dialog button:hover { background: #2a3a60; }"
+            "#settings-dialog switch { color: #88c0f0; }"
+            "separator { background: #3a4a70; }";
         break;
 
     case THEME_PRESET_D:
@@ -197,7 +278,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #201a30; border-top: 1px solid #382a50; color: #a888c8; }"
             "#mod-progress trough { background: #382a50; }"
             "#mod-progress progress { background: #9060c8; }"
-            "#mod-progress * { color: #120f1a; }";
+            "#mod-progress * { color: #120f1a; }"
+            "#filter-combo, #theme-combo { background: #2a2240; color: #c8a8e0; border: 1px solid #483a60; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #685080; background: #382a50; }"
+            "#settings-dialog { background: #120f1a; }"
+            "#settings-dialog label { color: #c8a8e0; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #2a2240; color: #c8a8e0; border-color: #483a60; }"
+            "#settings-dialog button { background: #2a2240; color: #c8a8e0; border: 1px solid #483a60; }"
+            "#settings-dialog button:hover { background: #382a50; }"
+            "#settings-dialog switch { color: #c8a8e0; }"
+            "separator { background: #483a60; }";
         break;
 
     default:
@@ -224,7 +314,16 @@ static void theme_apply_css(ThemeMode theme)
             "#status-bar { background: #ffffff; border-top: 1px solid #e0e0e0; color: #333333; }"
             "#mod-progress trough { background: #eeeeee; }"
             "#mod-progress progress { background: #4a90d9; }"
-            "#mod-progress * { color: #000000; }";
+            "#mod-progress * { color: #000000; }"
+            "#filter-combo, #theme-combo { background: #ffffff; color: #000000; border: 1px solid #d0d0d0; }"
+            "#filter-combo:hover, #theme-combo:hover { border-color: #bbbbbb; background: #f8f8f8; }"
+            "#settings-dialog { background: #f5f5f7; }"
+            "#settings-dialog label { color: #000000; }"
+            "#settings-dialog entry, #settings-dialog spinbutton { background: #ffffff; color: #000000; border-color: #d0d0d0; }"
+            "#settings-dialog button { background: #ffffff; color: #000000; border: 1px solid #d0d0d0; }"
+            "#settings-dialog button:hover { background: #f0f0f0; }"
+            "#settings-dialog switch { color: #000000; }"
+            "separator { background: #cccccc; }";
         break;
     }
 

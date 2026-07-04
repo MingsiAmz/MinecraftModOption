@@ -491,6 +491,7 @@ GtkWidget *main_window_create(void)
         "CurseForge",
         NULL
     });
+    gtk_widget_set_name(filter_combo, "filter-combo");
 
     gtk_box_append(GTK_BOX(search_bar), filter_combo);
 
@@ -549,5 +550,10 @@ GtkWidget *main_window_create(void)
 
     /* ─── 初始更新状态 ─── */
     main_window_update_status();
+
+    /* ─── 启动后立即应用已保存的主题样式 ─── */
+    AppState *state = app_get_state();
+    theme_apply(state->config.theme);
+
     return window;
 }

@@ -118,6 +118,7 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 480, 350);
+    gtk_widget_set_name(dialog, "settings-dialog");
 
     GtkWidget *content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_margin_start(content_box, 12);
@@ -130,29 +131,35 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     GtkWidget *mod_dir_e = gtk_entry_new();
     gtk_editable_set_text(GTK_EDITABLE(mod_dir_e), config->mod_dir);
     gtk_widget_set_hexpand(mod_dir_e, TRUE);
+    gtk_widget_set_name(mod_dir_e, "settings-entry");
     GtkWidget *r1 = add_labeled_row(content_box, "模组目录:", mod_dir_e);
 
     GtkWidget *bak_dir_e = gtk_entry_new();
     gtk_editable_set_text(GTK_EDITABLE(bak_dir_e), config->backup_dir);
     gtk_widget_set_hexpand(bak_dir_e, TRUE);
+    gtk_widget_set_name(bak_dir_e, "settings-entry");
     GtkWidget *r2 = add_labeled_row(content_box, "备份目录:", bak_dir_e);
 
     GtkWidget *max_bak_s = gtk_spin_button_new_with_range(0, 99, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(max_bak_s), config->max_backups);
+    gtk_widget_set_name(max_bak_s, "settings-spin");
     GtkWidget *r3 = add_labeled_row(content_box, "最大备份数:", max_bak_s);
 
     GtkWidget *cf_e = gtk_password_entry_new();
     if (config->curseforge_api_key[0])
         gtk_editable_set_text(GTK_EDITABLE(cf_e), config->curseforge_api_key);
     gtk_widget_set_hexpand(cf_e, TRUE);
+    gtk_widget_set_name(cf_e, "settings-password");
     GtkWidget *r4 = add_labeled_row(content_box, "CurseForge API Key:", cf_e);
 
     GtkWidget *auto_s = gtk_switch_new();
     gtk_switch_set_active(GTK_SWITCH(auto_s), config->auto_scan_on_start);
+    gtk_widget_set_name(auto_s, "settings-switch");
     GtkWidget *r5 = add_labeled_row(content_box, "启动时自动扫描:", auto_s);
 
     GtkWidget *backup_s = gtk_switch_new();
     gtk_switch_set_active(GTK_SWITCH(backup_s), config->backup_before_update);
+    gtk_widget_set_name(backup_s, "settings-switch");
     GtkWidget *r6 = add_labeled_row(content_box, "更新前自动备份:", backup_s);
 
     /* 主题选择 */
@@ -164,6 +171,7 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
         (const char*[]){ "🌗 跟随系统", "☀️ 浅色模式", "🌙 深色模式",
                          "🔴 暗红金", "🌲 森林绿", "🌊 海洋蓝",
                          "🟣 暗夜紫", NULL });
+    gtk_widget_set_name(theme_combo, "theme-combo");
 
     // GTK4 的 drop_down 不能直接设 active，用 selected 属性
     g_object_set(theme_combo, "selected", (guint)config->theme, NULL);
@@ -190,6 +198,8 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     gtk_widget_set_margin_top(btn_box, 12);
     GtkWidget *btn_cancel = gtk_button_new_with_label("取消");
     GtkWidget *btn_save = gtk_button_new_with_label("保存");
+    gtk_widget_set_name(btn_cancel, "settings-btn-cancel");
+    gtk_widget_set_name(btn_save, "settings-btn-save");
     gtk_box_append(GTK_BOX(btn_box), btn_cancel);
     gtk_box_append(GTK_BOX(btn_box), btn_save);
     gtk_box_append(GTK_BOX(content_box), btn_box);
