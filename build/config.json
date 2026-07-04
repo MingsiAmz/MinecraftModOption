@@ -1,8 +1,0 @@
-{
-	"mod_dir":	"C:\\Users\\MingsiAmz\\AppData\\Roaming\\.minecraft\\mods",
-	"backup_dir":	"C:\\Users\\MingsiAmz\\AppData\\Roaming\\.minecraft\\mods\\backups",
-	"max_backups":	5,
-	"curseforge_api_key":	"",
-	"auto_scan_on_start":	true,
-	"backup_before_update":	true
-}

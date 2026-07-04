@@ -1,3 +1,0 @@
-C:/Users/MingsiAmz/Documents/Code/Project/MinecraftModOption/build/CMakeFiles/MinecraftModOption.dir
-C:/Users/MingsiAmz/Documents/Code/Project/MinecraftModOption/build/CMakeFiles/edit_cache.dir
-C:/Users/MingsiAmz/Documents/Code/Project/MinecraftModOption/build/CMakeFiles/rebuild_cache.dir

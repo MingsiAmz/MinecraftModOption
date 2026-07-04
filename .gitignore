@@ -1,0 +1,31 @@
+# 构建目录
+build/
+CMakeFiles/
+cmake-build-*/
+
+# 编译产物
+*.obj
+*.exp
+*.lib
+*.dll
+*.pdb
+*.ilk
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+
+# 系统
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 配置（含本地路径和 API Key）
+config.json
+
+# 缓存
+mods_cache.json
