@@ -182,6 +182,20 @@ void mod_list_view_select_all(gboolean select)
     }
 }
 
+gboolean mod_list_view_has_any_checked(void)
+{
+    if (!store) return FALSE;
+    GtkTreeIter iter;
+    gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter);
+    while (valid) {
+        gboolean chk = FALSE;
+        gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, COL_CHECK, &chk, -1);
+        if (chk) return TRUE;
+        valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
+    }
+    return FALSE;
+}
+
 /* ─── Search / Filter ─── */
 void mod_list_view_set_filter(const char *search_text, const char *filter)
 {

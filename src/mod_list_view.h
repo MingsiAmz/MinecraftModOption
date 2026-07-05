@@ -29,6 +29,12 @@ int *mod_list_view_get_selected(int *count);
 void mod_list_view_select_all(gboolean select);
 
 /**
+ * 是否有任意模组被勾选
+ * @return TRUE 至少有一个勾选
+ */
+gboolean mod_list_view_has_any_checked(void);
+
+/**
  * 设置搜索文本和筛选条件
  * @param search_text 搜索文本（可为NULL）
  * @param filter 筛选条件（可为NULL）

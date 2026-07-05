@@ -284,17 +284,14 @@ static void on_scan_clicked(GtkButton *btn, gpointer userdata)
     g_thread_new("scan", scan_thread_func, d);
 }
 
-/* ═══════════════ Select All / None ═══════════════ */
-static void on_select_all_clicked(GtkButton *btn, gpointer userdata)
+/* ═══════════════ Select Toggle ═══════════════ */
+static void on_select_toggle_clicked(GtkButton *btn, gpointer userdata)
 {
-    (void)btn; (void)userdata;
-    mod_list_view_select_all(TRUE);
-}
-
-static void on_deselect_all_clicked(GtkButton *btn, gpointer userdata)
-{
-    (void)btn; (void)userdata;
-    mod_list_view_select_all(FALSE);
+    (void)userdata;
+    gboolean any_checked = mod_list_view_has_any_checked();
+    mod_list_view_select_all(!any_checked);
+    const char *label = any_checked ? "\xe2\x98\x90 \xe5\x8f\x96\xe6\xb6\x88\xe5\x85\xa8\xe9\x80\x89" : "\xe2\x98\x91 \xe5\x85\xa8\xe9\x80\x89";
+    gtk_button_set_label(btn, label);
 }
 
 /* ═══════════════ Update ═══════════════ */
@@ -555,10 +552,8 @@ GtkWidget *main_window_create(void)
     GtkWidget *b_upd_all = gtk_button_new_with_label("\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0\xe5\x85\xa8\xe9\x83\xa8");
     GtkWidget *b_roll   = gtk_button_new_with_label("\xe2\x86\xa9 \xe5\x9b\x9e\xe6\xbb\x9a");
     GtkWidget *b_del    = gtk_button_new_with_label("\xf0\x9f\x97\x91 \xe5\x88\xa0\xe9\x99\xa4");
-    GtkWidget *b_sel_all  = gtk_button_new_with_label("\xe2\x98\x91 All");
-    GtkWidget *b_sel_none = gtk_button_new_with_label("\xe2\x98\x90 None");
-    gtk_widget_set_name(b_sel_all, "btn-sel-all");
-    gtk_widget_set_name(b_sel_none, "btn-sel-none");
+    GtkWidget *b_sel_tog = gtk_button_new_with_label("\xe2\x98\x91 \xe5\x85\xa8\xe9\x80\x89");
+    gtk_widget_set_name(b_sel_tog, "btn-sel-tog");
     GtkWidget *b_set    = gtk_button_new_with_label("\xe2\x9a\x99 \xe8\xae\xbe\xe7\xbd\xae");
 
     // 为每个按钮Settings CSS name，以便精确覆盖样式
@@ -578,8 +573,7 @@ GtkWidget *main_window_create(void)
     gtk_box_append(GTK_BOX(tb), b_upd_all);
     gtk_box_append(GTK_BOX(tb), b_roll);
     gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
-    gtk_box_append(GTK_BOX(tb), b_sel_all);
-    gtk_box_append(GTK_BOX(tb), b_sel_none);
+    gtk_box_append(GTK_BOX(tb), b_sel_tog);
     gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
     gtk_box_append(GTK_BOX(tb), b_del);
     gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
@@ -657,8 +651,7 @@ GtkWidget *main_window_create(void)
     g_signal_connect(b_upd_sel, "clicked", G_CALLBACK(on_update_sel_clicked), NULL);
     g_signal_connect(b_upd_all, "clicked", G_CALLBACK(on_update_all_clicked), NULL);
     g_signal_connect(b_roll,    "clicked", G_CALLBACK(on_rollback_clicked), NULL);
-    g_signal_connect(b_sel_all, "clicked", G_CALLBACK(on_select_all_clicked), NULL);
-    g_signal_connect(b_sel_none,"clicked", G_CALLBACK(on_deselect_all_clicked), NULL);
+    g_signal_connect(b_sel_tog, "clicked", G_CALLBACK(on_select_toggle_clicked), NULL);
     g_signal_connect(b_del,     "clicked", G_CALLBACK(on_delete_clicked), NULL);
     g_signal_connect(b_set,     "clicked", G_CALLBACK(on_settings_clicked), NULL);
 
