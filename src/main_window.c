@@ -199,6 +199,15 @@ static int count_jars(const char *dir)
 static gpointer scan_thread_func(gpointer userdata)
 {
     ScanData *data = (ScanData *)userdata;
+
+    // 立即写 debug 日志 — 确认线程启动
+    FILE *dbg0 = fopen("scan_debug0.txt", "w");
+    if (dbg0) {
+        fprintf(dbg0, "scan_thread_func STARTED\n");
+        fprintf(dbg0, "mod_dir='%s'\n", data->mod_dir);
+        fclose(dbg0);
+    }
+
     GPtrArray *mods = mod_list_get_all();
     mod_list_clear();
 
@@ -207,29 +216,58 @@ static gpointer scan_thread_func(gpointer userdata)
     data->total_files = total_jars;
     data->scanned_count = 0;
 
+    // 写 debug — count_jars 结果
+    FILE *dbg1 = fopen("scan_debug1.txt", "w");
+    if (dbg1) {
+        fprintf(dbg1, "count_jars returned: %d\n", total_jars);
+        fclose(dbg1);
+    }
+
     g_idle_add((GSourceFunc)show_progress, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
 
     // 扫描目录内的 .jar 文件并逐个解析
     DIR *dir = opendir(data->mod_dir);
     if (!dir) {
+        FILE *de = fopen("scan_debug_dir.txt", "w");
+        if (de) { fprintf(de, "opendir FAILED for '%s'\n", data->mod_dir); fclose(de); }
         g_idle_add(scan_finished_idle, NULL);
         g_free(data);
         return NULL;
     }
 
+    FILE *dbg_jar = fopen("scan_debug_jars.txt", "w");
     int scanned = 0;
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         const char *name = entry->d_name;
+        // 跳过 . 和 ..
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
         size_t len = strlen(name);
-        if (len < 4 || strcasecmp(name + len - 4, ".jar") != 0)
+        if (len < 4) {
+            if (dbg_jar) fprintf(dbg_jar, "SKIP-short: '%s'\n", name);
             continue;
+        }
+        // 检查 .jar 后缀（不区分大小写）
+        const char *ext = name + len - 4;
+        int is_jar = 0;
+        if ((ext[0] == '.' || ext[0] == '.') &&
+            (ext[1] == 'j' || ext[1] == 'J') &&
+            (ext[2] == 'a' || ext[2] == 'A') &&
+            (ext[3] == 'r' || ext[3] == 'R')) is_jar = 1;
+        if (!is_jar) {
+            if (dbg_jar) fprintf(dbg_jar, "SKIP-ext: '%s' (ext=%.4s)\n", name, ext);
+            continue;
+        }
+
+        if (dbg_jar) fprintf(dbg_jar, "PROCESS: '%s'\n", name);
 
         char full_path[2048];
         snprintf(full_path, sizeof(full_path), "%s\\%s", data->mod_dir, name);
 
         ModInfo info;
-        if (scanner_parse_jar(full_path, &info) == 0) {
+        int ret = scanner_parse_jar(full_path, &info);
+        if (dbg_jar) fprintf(dbg_jar, "  parse_jar returned %d, name='%s', mod_id='%s'\n", ret, info.name, info.mod_id);
+        if (ret == 0) {
             mod_list_add(&info);
             scanned++;
         }
@@ -240,6 +278,7 @@ static gpointer scan_thread_func(gpointer userdata)
             post_progress(scanned, total_jars, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f... %d/%d", scanned, total_jars);
         }
     }
+    if (dbg_jar) { fprintf(dbg_jar, "SCAN DONE: scanned=%d\n", scanned); fclose(dbg_jar); }
     closedir(dir);
 
     int total = mod_list_count();
