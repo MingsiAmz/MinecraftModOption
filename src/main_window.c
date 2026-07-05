@@ -211,13 +211,51 @@ static gpointer scan_thread_func(gpointer userdata)
 
     write_debug_log("scan_log.txt", "=== scan_thread STARTED ===\nmod_dir=%s\n", data->mod_dir);
 
-    GPtrArray *mods = mod_list_get_all();
+    // 第一步：列举目录中所有 .jar 文件（只用文件名，不解析 jar 内部）
     mod_list_clear();
 
-    // 扫描目录
-    int found = scanner_scan_directory(data->mod_dir, mods);
-    write_debug_log("scan_log.txt", "scanner_scan_directory returned: %d\n", found);
-    write_debug_log("scan_log.txt", "mod_list_count after scan: %d\n", mod_list_count());
+    // 使用 FindFirstFile/FindNextFile（最可靠的 Windows API）
+    int jar_count = 0;
+    char pattern[1030];
+    snprintf(pattern, sizeof(pattern), "%s\\*.jar", data->mod_dir);
+
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(pattern, &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+
+            char full_path[2048];
+            snprintf(full_path, sizeof(full_path), "%s\\%s", data->mod_dir, ffd.cFileName);
+
+            // 创建模组信息（只用文件名，不解析 jar）
+            ModInfo info;
+            memset(&info, 0, sizeof(info));
+            snprintf(info.file_name, sizeof(info.file_name), "%s", ffd.cFileName);
+            snprintf(info.file_path, sizeof(info.file_path), "%s", full_path);
+            // 只取低32位（对 4GB+ 文件截断，模组 jar 通常远小于 4GB）
+            info.file_size = (long)(ffd.nFileSizeLow);
+            info.status = MOD_STATUS_UNKNOWN;
+
+            // 文件名去掉 .jar 作为名称
+            char name_only[256];
+            snprintf(name_only, sizeof(name_only), "%s", ffd.cFileName);
+            char *dot = strrchr(name_only, '.');
+            if (dot && strcasecmp(dot, ".jar") == 0) *dot = '\0';
+            snprintf(info.name, sizeof(info.name), "%s", name_only);
+            snprintf(info.mod_id, sizeof(info.mod_id), "%s", name_only);
+
+            mod_list_add(&info);
+            jar_count++;
+
+            // 更新进度
+            write_debug_log("scan_log.txt", "  added: %s\n", ffd.cFileName);
+        } while (FindNextFileA(hFind, &ffd) != 0);
+        FindClose(hFind);
+    }
+
+    write_debug_log("scan_log.txt", "Total jars found: %d\n", jar_count);
+    write_debug_log("scan_log.txt", "mod_list_count: %d\n", mod_list_count());
 
     int total = mod_list_count();
     g_idle_add((GSourceFunc)show_progress,
@@ -258,6 +296,7 @@ static gpointer scan_thread_func(gpointer userdata)
             post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
         }
 
+        GPtrArray *mods = mod_list_get_all();
         cache_save(mods);
     }
 
