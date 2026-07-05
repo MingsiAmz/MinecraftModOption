@@ -125,15 +125,15 @@ static gpointer scan_thread_func(gpointer userdata)
     g_idle_add((GSourceFunc)show_progress, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
     int found = scanner_scan_directory(data->mod_dir, mods);
 
-    // 无模组则跳过版本查询和缓存保存
-    if (found <= 0) {
+    AppState *state = app_get_state();
+    int total = mod_list_count();
+
+    // 无模组则直接刷新视图（显示空列表），跳过版本查询和缓存保存
+    if (found <= 0 || total == 0) {
         g_idle_add(scan_finished_idle, NULL);
         g_free(data);
         return NULL;
     }
-
-    AppState *state = app_get_state();
-    int total = mod_list_count();
     g_idle_add((GSourceFunc)show_progress, "\xe2\x8c\x9b \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac...");
 
     for (int i = 0; i < total; i++) {
