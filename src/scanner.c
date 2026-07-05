@@ -558,24 +558,8 @@ int scanner_scan_directory(const char *mod_dir, GPtrArray *mods)
     if (!dir) return -1;
 
     int count = 0;
-    int total_jars = 0;
     struct dirent *entry;
 
-    // 第一遍：统计 jar 文件数量
-    while ((entry = readdir(dir)) != NULL) {
-        const char *name = entry->d_name;
-        size_t len = strlen(name);
-        if (len >= 4 && (strcasecmp(name + len - 4, ".jar") == 0))
-            total_jars++;
-    }
-    rewinddir(dir);
-
-    if (total_jars == 0) {
-        closedir(dir);
-        return 0;
-    }
-
-    // 第二遍：解析每个 jar
     while ((entry = readdir(dir)) != NULL) {
         const char *name = entry->d_name;
         size_t len = strlen(name);
@@ -584,11 +568,6 @@ int scanner_scan_directory(const char *mod_dir, GPtrArray *mods)
 
         char full_path[2048];
         snprintf(full_path, sizeof(full_path), "%s\\%s", mod_dir, name);
-
-        // 先检查文件是否可读，跳过大文件/损坏文件
-        FILE *test = fopen(full_path, "rb");
-        if (!test) continue;
-        fclose(test);
 
         ModInfo info;
         if (scanner_parse_jar(full_path, &info) == 0) {
