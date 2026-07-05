@@ -12,6 +12,9 @@
 #include "cache.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <dirent.h>
+#include <windows.h>
 
 /* ─── 全局控件引用 ─── */
 static GtkWidget *window = NULL;
@@ -103,12 +106,62 @@ static void on_filter_changed(GtkComboBox *combo, gpointer userdata)
 }
 
 /* ═══════════════ 扫描 ═══════════════ */
-typedef struct { char mod_dir[1024]; } ScanData;
+typedef struct {
+    char mod_dir[1024];
+    int total_files;       // 总共要扫描的 jar 数（先列举，存这里）
+    int scanned_count;     // 已扫描计数（线程安全：只由扫描线程写）
+} ScanData;
 
+// 进度更新数据结构 — 从扫描线程传给 idle 回调
+typedef struct {
+    int current;
+    int total;
+    char text[64];
+} ProgressUpdate;
+
+static gboolean progress_update_idle(gpointer userdata)
+{
+    ProgressUpdate *pu = (ProgressUpdate *)userdata;
+    if (progress_bar && pu->total > 0) {
+        double frac = (double)pu->current / pu->total;
+        if (frac > 1.0) frac = 1.0;
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), frac);
+        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), pu->text);
+    }
+    g_free(pu);
+    return G_SOURCE_REMOVE;
+}
+
+static void post_progress(int cur, int total, const char *fmt, ...)
+{
+    ProgressUpdate *pu = g_new(ProgressUpdate, 1);
+    pu->current = cur;
+    pu->total = total;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(pu->text, sizeof(pu->text), fmt, ap);
+    va_end(ap);
+    g_idle_add(progress_update_idle, pu);
+}
+
+// 扫描完成时的 idle 回调
 static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
     int total = mod_list_count();
+
+    // 调试：把前几个模组名记下来
+    FILE *dbg = fopen("scan_debug.txt", "w");
+    if (dbg) {
+        fprintf(dbg, "scan_finished: total=%d\n", total);
+        for (int i = 0; i < (total > 5 ? 5 : total); i++) {
+            ModInfo *m = mod_list_get(i);
+            if (m) fprintf(dbg, "  [%d] name='%s' id='%s' ver='%s'\n",
+                    i, m->name, m->mod_id, m->local_version);
+        }
+        fclose(dbg);
+    }
+
     mod_list_view_refresh();
     main_window_update_status();
     hide_progress();
@@ -123,25 +176,84 @@ static gboolean scan_finished_idle(gpointer userdata)
     return G_SOURCE_REMOVE;
 }
 
+// 预先列举 jar 文件数量
+static int count_jars(const char *dir)
+{
+    int count = 0;
+    WIN32_FIND_DATAA ffd;
+    char pattern[1030];
+    snprintf(pattern, sizeof(pattern), "%s\\*", dir);
+    HANDLE hFind = FindFirstFileA(pattern, &ffd);
+    if (hFind == INVALID_HANDLE_VALUE) return 0;
+    do {
+        if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            size_t len = strlen(ffd.cFileName);
+            if (len >= 4 && (strcasecmp(ffd.cFileName + len - 4, ".jar") == 0))
+                count++;
+        }
+    } while (FindNextFileA(hFind, &ffd) != 0);
+    FindClose(hFind);
+    return count;
+}
+
 static gpointer scan_thread_func(gpointer userdata)
 {
     ScanData *data = (ScanData *)userdata;
     GPtrArray *mods = mod_list_get_all();
     mod_list_clear();
 
+    // 先列举 jar 数量用于进度条
+    int total_jars = count_jars(data->mod_dir);
+    data->total_files = total_jars;
+    data->scanned_count = 0;
+
     g_idle_add((GSourceFunc)show_progress, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
-    int found = scanner_scan_directory(data->mod_dir, mods);
 
-    AppState *state = app_get_state();
-    int total = mod_list_count();
-
-    // 无模组则直接刷新视图（显示空列表），跳过版本查询和缓存保存
-    if (found <= 0 || total == 0) {
+    // 扫描目录内的 .jar 文件并逐个解析
+    DIR *dir = opendir(data->mod_dir);
+    if (!dir) {
         g_idle_add(scan_finished_idle, NULL);
         g_free(data);
         return NULL;
     }
-    g_idle_add((GSourceFunc)show_progress, "\xe2\x8c\x9b \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac...");
+
+    int scanned = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        const char *name = entry->d_name;
+        size_t len = strlen(name);
+        if (len < 4 || strcasecmp(name + len - 4, ".jar") != 0)
+            continue;
+
+        char full_path[2048];
+        snprintf(full_path, sizeof(full_path), "%s\\%s", data->mod_dir, name);
+
+        ModInfo info;
+        if (scanner_parse_jar(full_path, &info) == 0) {
+            mod_list_add(&info);
+            scanned++;
+        }
+
+        // 更新进度条
+        data->scanned_count = scanned;
+        if (total_jars > 0) {
+            post_progress(scanned, total_jars, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f... %d/%d", scanned, total_jars);
+        }
+    }
+    closedir(dir);
+
+    int total = mod_list_count();
+
+    // 无模组则直接刷新视图（显示空列表），跳过版本查询和缓存保存
+    if (total == 0) {
+        g_idle_add(scan_finished_idle, NULL);
+        g_free(data);
+        return NULL;
+    }
+
+    // 版本查询阶段
+    AppState *state = app_get_state();
+    post_progress(0, total, "\xe2\x8c\x9b \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac...");
 
     for (int i = 0; i < total; i++) {
         ModInfo *mod = mod_list_get(i);
@@ -164,15 +276,20 @@ static gpointer scan_thread_func(gpointer userdata)
         // 尝试 Modrinth 查询
         if (modrinth_query_version(mod, mc_ver[0]?mc_ver:NULL,
                 mod->loader[0]?mod->loader:NULL) == 0) {
+            post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
             continue;
         }
 
         // 尝试 CurseForge 查询
-        if (state->config.curseforge_api_key[0])
+        if (state->config.curseforge_api_key[0]) {
             curseforge_query_version(mod, state->config.curseforge_api_key,
                 mc_ver[0]?mc_ver:NULL);
+        }
+
+        post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
     }
 
+    // 版本查询完成后再进行最终视图刷新
     cache_save(mods);
     g_idle_add(scan_finished_idle, NULL);
     g_free(data);
