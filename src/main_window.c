@@ -8,6 +8,7 @@
 #include "curseforge.h"
 #include "updater.h"
 #include "deleter.h"
+#include <process.h>  /* for _beginthreadex */
 #include "rollback.h"
 #include "cache.h"
 #include <string.h>
@@ -19,6 +20,7 @@
 
 /* ─── 前向声明 ─── */
 static void write_debug_log(const char *fname, const char *fmt, ...);
+static gboolean version_check_finished_idle(gpointer userdata);
 
 /* ─── 全局控件引用 ─── */
 static GtkWidget *window = NULL;
@@ -119,6 +121,20 @@ typedef struct {
     int total;
 } VersionProgress;
 
+/* thread-safe counter for concurrent version queries */
+typedef struct {
+    volatile LONG completed;
+    int total;
+    CRITICAL_SECTION cs;
+} QueryCounter;
+
+/* per-mod query task data */
+typedef struct {
+    ModInfo *mod;
+    char mc_ver[32];
+    char curse_api[256];
+} QueryTask;
+
 /* Idle: show list immediately after scan */
 static gboolean scan_finished_idle(gpointer userdata)
 {
@@ -146,6 +162,57 @@ static gboolean version_progress_idle(gpointer userdata)
     set_progress(frac, text);
     g_free(p);
     return G_SOURCE_REMOVE;
+}
+
+/* Idle: update concurrent query progress */
+static gboolean query_progress_idle(gpointer userdata)
+{
+    QueryCounter *qc = (QueryCounter *)userdata;
+    int done = (int)InterlockedExchangeAdd(&qc->completed, 0);
+    double frac = (qc->total > 0) ? (double)done / qc->total : 0.0;
+    char text[128];
+    snprintf(text, sizeof(text), "正在查询版本... %d/%d", done, qc->total);
+    set_progress(frac, text);
+    /* don't free qc here, reused until all done */
+    return G_SOURCE_REMOVE;
+}
+
+/* Idle: check if all concurrent queries are done */
+static gboolean query_done_check_idle(gpointer userdata)
+{
+    QueryCounter *qc = (QueryCounter *)userdata;
+    int done = (int)InterlockedExchangeAdd(&qc->completed, 0);
+    if (done < qc->total)
+        return G_SOURCE_CONTINUE;  /* keep checking */
+
+    /* all done */
+    DeleteCriticalSection(&qc->cs);
+
+    GPtrArray *mods = mod_list_get_all();
+    cache_save(mods);
+
+    g_free(qc);
+
+    version_check_finished_idle(NULL);
+    return G_SOURCE_REMOVE;
+}
+
+/* thread function: query one mod version */
+static unsigned __stdcall query_one_mod_thread(void *arg)
+{
+    QueryTask *task = (QueryTask *)arg;
+    modrinth_query_version(task->mod,
+        task->mc_ver[0] ? task->mc_ver : NULL,
+        task->mod->loader[0] ? task->mod->loader : NULL);
+
+    if (task->curse_api[0]) {
+        curseforge_query_version(task->mod, task->curse_api,
+            task->mc_ver[0] ? task->mc_ver : NULL);
+    }
+
+    g_free(task);
+    _endthreadex(0);
+    return 0;
 }
 
 /* Idle: version check done, unlock scan button */
@@ -254,50 +321,86 @@ static gpointer scan_thread_func(gpointer userdata)
     // ─── 立即刷新 UI 显示列表（不等版本查询） ───
     g_idle_add(scan_finished_idle, NULL);
 
-    // ─── 后台版本查询 ───
+    // ─── 并发后台版本查询（多线程加速） ───
     if (total > 0) {
         AppState *state = app_get_state();
         g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, show_progress_idle,
             g_strdup("正在查询版本..."), NULL);
 
-        for (int i = 0; i < total; i++) {
-            ModInfo *mod = mod_list_get(i);
-            if (!mod) continue;
+        QueryCounter *qc = g_new(QueryCounter, 1);
+        qc->completed = 0;
+        qc->total = total;
+        InitializeCriticalSection(&qc->cs);
 
-            // 更新进度
-            VersionProgress *vp = g_new(VersionProgress, 1);
-            vp->current = i + 1;
-            vp->total = total;
-            g_idle_add(version_progress_idle, vp);
+        int max_threads = min(total, 8);
+        if (max_threads < 1) max_threads = 1;
+        HANDLE *threads = g_new(HANDLE, max_threads);
+        int thread_count = 0;
+        int next_i = 0;
 
-            char mc_ver[32] = "";
-            if (mod->mc_version[0]) {
-                const char *p = strchr(mod->mc_version, '.');
-                if (p) {
-                    p = strchr(p+1, '.');
+        while (next_i < total || thread_count > 0) {
+            /* spawn threads up to max */
+            while (thread_count < max_threads && next_i < total) {
+                ModInfo *mod = mod_list_get(next_i);
+                if (!mod) { next_i++; continue; }
+
+                QueryTask *task = g_new(QueryTask, 1);
+                task->mod = mod;
+                task->mc_ver[0] = '\0';
+                task->curse_api[0] = '\0';
+
+                if (mod->mc_version[0]) {
+                    const char *p = strchr(mod->mc_version, '.');
                     if (p) {
-                        size_t n = p - mod->mc_version;
-                        if (n < sizeof(mc_ver)) strncpy(mc_ver, mod->mc_version, n);
+                        p = strchr(p+1, '.');
+                        if (p) {
+                            size_t n = p - mod->mc_version;
+                            if (n < sizeof(task->mc_ver))
+                                strncpy(task->mc_ver, mod->mc_version, n);
+                        }
                     }
+                    if (!task->mc_ver[0])
+                        snprintf(task->mc_ver, sizeof(task->mc_ver), "%s", mod->mc_version);
                 }
-                if (!mc_ver[0]) snprintf(mc_ver, sizeof(mc_ver), "%s", mod->mc_version);
+
+                if (state->config.curseforge_api_key[0])
+                    snprintf(task->curse_api, sizeof(task->curse_api), "%s",
+                        state->config.curseforge_api_key);
+
+                threads[thread_count] = (HANDLE)_beginthreadex(NULL, 0,
+                    query_one_mod_thread, task, 0, NULL);
+                thread_count++;
+                next_i++;
             }
 
-            modrinth_query_version(mod, mc_ver[0]?mc_ver:NULL,
-                    mod->loader[0]?mod->loader:NULL);
+            /* wait for any thread to finish (100ms poll) */
+            DWORD wait = WaitForMultipleObjects(thread_count, threads, FALSE, 100);
 
-            if (state->config.curseforge_api_key[0]) {
-                curseforge_query_version(mod, state->config.curseforge_api_key,
-                    mc_ver[0]?mc_ver:NULL);
+            /* clean up finished threads and count progress */
+            int new_count = 0;
+            for (int i = 0; i < thread_count; i++) {
+                DWORD ret = WaitForSingleObject(threads[i], 0);
+                if (ret == WAIT_OBJECT_0) {
+                    CloseHandle(threads[i]);
+                    InterlockedIncrement(&qc->completed);
+                } else {
+                    threads[new_count++] = threads[i];
+                }
             }
+            thread_count = new_count;
+
+            /* update progress bar */
+            g_idle_add(query_progress_idle, qc);
         }
 
-        GPtrArray *mods = mod_list_get_all();
-        cache_save(mods);
-    }
+        g_free(threads);
 
-    /* Refresh UI after version queries */
-    g_idle_add(version_check_finished_idle, NULL);
+        /* wait for any remaining progress update then save cache */
+        g_idle_add(query_done_check_idle, qc);
+    } else {
+        /* no mods, just unlock */
+        g_idle_add(version_check_finished_idle, NULL);
+    }
 
     g_free(data);
     return NULL;
