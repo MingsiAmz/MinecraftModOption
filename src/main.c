@@ -5,6 +5,27 @@
 #include "modrinth.h"
 #include "cache.h"
 #include <gtk/gtk.h>
+#include <windows.h>
+#include <string.h>
+
+// ─── 写入调试日志（exe 同目录） ───
+static void write_debug_log(const char *fname, const char *fmt, ...)
+{
+    char path[2048];
+    GetModuleFileNameA(NULL, path, sizeof(path));
+    char *p = strrchr(path, '\\');
+    if (p) *(p+1) = '\0';
+    else path[0] = '\0';
+    strncat(path, fname, sizeof(path) - strlen(path) - 1);
+
+    FILE *f = fopen(path, "a");
+    if (!f) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fclose(f);
+}
 
 static gboolean auto_scan_finished(gpointer userdata)
 {
@@ -13,18 +34,63 @@ static gboolean auto_scan_finished(gpointer userdata)
     main_window_update_status();
     AppState *state = app_get_state();
     state->is_scanning = FALSE;
+    write_debug_log("scan_log.txt", "auto_scan_finished: is_scanning = FALSE\n");
     return G_SOURCE_REMOVE;
 }
 
 static gpointer auto_scan_thread(gpointer userdata)
 {
     char *dir = (char *)userdata;
-    GPtrArray *mods = mod_list_get_all();
-    mod_list_clear();
-    int found = scanner_scan_directory(dir, mods);
 
-    // 无模组则跳过后续处理
-    if (found > 0) {
+    write_debug_log("scan_log.txt", "=== auto_scan_thread STARTED ===\ndir=%s\n", dir);
+
+    // 用 FindFirstFile 直接搜 .jar 文件（不解析 jar 内部）
+    mod_list_clear();
+
+    char pattern[1030];
+    snprintf(pattern, sizeof(pattern), "%s\\*.jar", dir);
+
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(pattern, &ffd);
+    int jar_count = 0;
+
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+
+            char full_path[2048];
+            snprintf(full_path, sizeof(full_path), "%s\\%s", dir, ffd.cFileName);
+
+            ModInfo info;
+            memset(&info, 0, sizeof(info));
+            snprintf(info.file_name, sizeof(info.file_name), "%s", ffd.cFileName);
+            snprintf(info.file_path, sizeof(info.file_path), "%s", full_path);
+            info.file_size = (long)(ffd.nFileSizeLow);
+            info.status = MOD_STATUS_UNKNOWN;
+
+            // 文件名去 .jar 后缀
+            char name_only[256];
+            snprintf(name_only, sizeof(name_only), "%s", ffd.cFileName);
+            char *dot = strrchr(name_only, '.');
+            if (dot && (strcmp(dot, ".jar") == 0 ||
+                strcmp(dot, ".JAR") == 0 ||
+                (dot[0]=='.' && (dot[1]=='j'||dot[1]=='J') &&
+                              (dot[2]=='a'||dot[2]=='A') &&
+                              (dot[3]=='r'||dot[3]=='R'))))
+                *dot = '\0';
+            snprintf(info.name, sizeof(info.name), "%s", name_only);
+            snprintf(info.mod_id, sizeof(info.mod_id), "%s", name_only);
+
+            mod_list_add(&info);
+            jar_count++;
+        } while (FindNextFileA(hFind, &ffd) != 0);
+        FindClose(hFind);
+    }
+
+    write_debug_log("scan_log.txt", "auto_scan: jars found=%d, mod_list_count=%d\n", jar_count, mod_list_count());
+
+    if (jar_count > 0) {
+        GPtrArray *mods = mod_list_get_all();
         for (int i = 0; i < mod_list_count(); i++) {
             ModInfo *mod = mod_list_get(i);
             if (!mod) continue;
@@ -42,6 +108,7 @@ static gboolean auto_scan_start(gpointer userdata)
 {
     (void)userdata;
     AppState *state = app_get_state();
+    write_debug_log("scan_log.txt", "auto_scan_start: is_scanning=%d\n", state->is_scanning);
     if (!state->is_scanning) {
         state->is_scanning = TRUE;
         g_thread_new("auto-scan", auto_scan_thread,
