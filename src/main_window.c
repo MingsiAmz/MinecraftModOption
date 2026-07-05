@@ -108,11 +108,18 @@ typedef struct { char mod_dir[1024]; } ScanData;
 static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
+    int total = mod_list_count();
     mod_list_view_refresh();
     main_window_update_status();
     hide_progress();
     AppState *state = app_get_state();
     state->is_scanning = FALSE;
+
+    // 扫描完成提示
+    char msg[128];
+    snprintf(msg, sizeof(msg), "\xe6\x89\xab\xe6\x8f\x8f\xe5\xae\x8c\xe6\x88\x90\xef\xbc\x8c\xe5\x85\xb1 %d \xe4\xb8\xaa\xe6\xa8\xa1\xe7\xbb\x84", total);
+    gtk_label_set_text(GTK_LABEL(status_bar_label), msg);
+
     return G_SOURCE_REMOVE;
 }
 
