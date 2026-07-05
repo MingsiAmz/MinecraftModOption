@@ -125,7 +125,7 @@ static gpointer scan_thread_func(gpointer userdata)
     g_idle_add((GSourceFunc)show_progress, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
     int found = scanner_scan_directory(data->mod_dir, mods);
 
-    // 无模组则跳过后续处理
+    // 无模组则跳过版本查询和缓存保存
     if (found <= 0) {
         g_idle_add(scan_finished_idle, NULL);
         g_free(data);
