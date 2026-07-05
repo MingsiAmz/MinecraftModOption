@@ -21,14 +21,17 @@ static gpointer auto_scan_thread(gpointer userdata)
     char *dir = (char *)userdata;
     GPtrArray *mods = mod_list_get_all();
     mod_list_clear();
-    scanner_scan_directory(dir, mods);
+    int found = scanner_scan_directory(dir, mods);
 
-    for (int i = 0; i < mod_list_count(); i++) {
-        ModInfo *mod = mod_list_get(i);
-        if (!mod) continue;
-        modrinth_query_version(mod, NULL, NULL);
+    // 无模组则跳过后续处理
+    if (found > 0) {
+        for (int i = 0; i < mod_list_count(); i++) {
+            ModInfo *mod = mod_list_get(i);
+            if (!mod) continue;
+            modrinth_query_version(mod, NULL, NULL);
+        }
+        cache_save(mods);
     }
-    cache_save(mods);
 
     g_idle_add(auto_scan_finished, NULL);
     g_free(dir);
