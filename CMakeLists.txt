@@ -14,6 +14,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 REQUIRED gtk4)
 pkg_check_modules(CJSON REQUIRED libcjson)
 pkg_check_modules(LIBCURL REQUIRED libcurl)
+pkg_check_modules(ZLIB REQUIRED zlib)
 
 set(SOURCES
     src/main.c
@@ -61,6 +62,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${GTK4_INCLUDE_DIRS}
     ${CJSON_INCLUDE_DIRS}
     ${LIBCURL_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIRS}
     src
 )
 
@@ -68,12 +70,14 @@ target_link_directories(${PROJECT_NAME} PRIVATE
     ${GTK4_LIBRARY_DIRS}
     ${CJSON_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
+    ${ZLIB_LIBRARY_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${GTK4_LIBRARIES}
     ${CJSON_LIBRARIES}
     ${LIBCURL_LIBRARIES}
+    ${ZLIB_LIBRARIES}
 )
 
 if(WIN32)

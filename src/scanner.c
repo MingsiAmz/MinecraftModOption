@@ -7,6 +7,7 @@
 #include <cjson/cJSON.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <zlib.h>
 
 // 全局临时目录缓冲区（用于 fallback 解压）
 static char tmp_dir_global[MAX_PATH] = "";
@@ -139,97 +140,37 @@ static int read_file_from_jar(const char *jar_path, const char *internal_path,
                             }
                         }
                     } else if (compression == 8) {
-                        // DEFLATE 压缩 — 使用 Windows 的 inflate
-                        // 先尝试用 PowerShell 解压（兼容性更好）
-                        // 这里 fallback 到 powersehll 方法
-                        char ps_cmd[8192];
-                        char win_path[MAX_PATH];
-                        snprintf(win_path, sizeof(win_path), "%s", jar_path);
-                        char clean_path[MAX_PATH];
-                        snprintf(clean_path, sizeof(clean_path), "%s", search_path);
+                        // DEFLATE 压缩 — 使用 zlib inflate 直接解压（比 PowerShell 快百倍）
+                        unsigned int comp_size = lf_compressed > 0 ? lf_compressed : compressed_size;
+                        unsigned int uncomp_size = uncompressed_size;
+                        if (comp_size > 0 && uncomp_size > 0 &&
+                            data_offset + comp_size <= fsize) {
+                            z_stream strm;
+                            memset(&strm, 0, sizeof(strm));
+                            strm.next_in = (unsigned char *)(data + data_offset);
+                            strm.avail_in = comp_size;
 
-                        // PowerShell 脚本：展开指定文件
-                        snprintf(ps_cmd, sizeof(ps_cmd),
-                            "powershell -NoProfile -Command  "
-                            "\"$zip = [System.IO.Compression.ZipFile]::OpenRead('%s'); "
-                            "$entry = $zip.Entries | Where-Object { $_.FullName -eq '%s' }; "
-                            "if ($entry) { "
-                            "  $sr = New-Object System.IO.StreamReader($entry.Open()); "
-                            "  $sr.ReadToEnd() "
-                            "} "
-                            "$zip.Dispose()\" 2>nul",
-                            jar_path, search_path);
-
-                        // 使用管道读取输出
-                        FILE *ps = _popen(ps_cmd, "r");
-                        if (ps) {
-                            char buf[4096];
-                            size_t total = 0, cap = 4096;
-                            *output = malloc(cap);
+                            *output = malloc(uncomp_size + 1);
                             if (*output) {
-                                while (fgets(buf, sizeof(buf), ps)) {
-                                    size_t blen = strlen(buf);
-                                    if (total + blen + 1 > cap) {
-                                        cap *= 2;
-                                        char *newp = realloc(*output, cap);
-                                        if (!newp) { free(*output); *output = NULL; break; }
-                                        *output = newp;
-                                    }
-                                    memcpy(*output + total, buf, blen);
-                                    total += blen;
-                                }
-                                if (*output) {
-                                    (*output)[total] = '\0';
-                                    *output_len = total;
-                                    result = 0;
-                                }
-                            }
-                            _pclose(ps);
-                        } else {
-                            // 最后的 fallback：用 Expand-Archive 解压到临时目录
-                            char tmp_subdir[MAX_PATH];
-                            GetTempPathA(MAX_PATH, tmp_dir_global);
-                            snprintf(tmp_subdir, sizeof(tmp_subdir), "%smodmgr_%lu",
-                                     tmp_dir_global, GetCurrentThreadId());
-                            CreateDirectoryA(tmp_subdir, NULL);
+                                strm.next_out = (unsigned char *)(*output);
+                                strm.avail_out = uncomp_size;
 
-                            snprintf(ps_cmd, sizeof(ps_cmd),
-                                "powershell -NoProfile -Command "
-                                "\"Expand-Archive -Path '%s' -DestinationPath '%s' -Force; "
-                                "Get-Content -Path '%s\\\\%s' -Raw -Encoding UTF8\" 2>nul",
-                                jar_path, tmp_subdir, tmp_subdir, search_path);
-
-                            FILE *ps2 = _popen(ps_cmd, "r");
-                            if (ps2) {
-                                char buf[4096];
-                                size_t total = 0, cap = 4096;
-                                *output = malloc(cap);
-                                if (*output) {
-                                    while (fgets(buf, sizeof(buf), ps2)) {
-                                        size_t blen = strlen(buf);
-                                        if (total + blen + 1 > cap) {
-                                            cap *= 2;
-                                            char *newp = realloc(*output, cap);
-                                            if (!newp) { free(*output); *output = NULL; break; }
-                                            *output = newp;
-                                        }
-                                        memcpy(*output + total, buf, blen);
-                                        total += blen;
-                                    }
-                                    if (*output) {
-                                        (*output)[total] = '\0';
-                                        *output_len = total;
+                                int ret = inflateInit2(&strm, -MAX_WBITS);
+                                if (ret == Z_OK) {
+                                    ret = inflate(&strm, Z_FINISH);
+                                    if (ret == Z_STREAM_END || ret == Z_OK) {
+                                        unsigned int written = uncomp_size - strm.avail_out;
+                                        (*output)[written] = '\0';
+                                        *output_len = written;
                                         result = 0;
                                     }
+                                    inflateEnd(&strm);
                                 }
-                                _pclose(ps2);
+                                if (result != 0) {
+                                    free(*output);
+                                    *output = NULL;
+                                }
                             }
-
-                            // 清理临时目录
-                            char rmdir_cmd[2048];
-                            snprintf(rmdir_cmd, sizeof(rmdir_cmd),
-                                     "rmdir /s /q \"%s\"", tmp_subdir);
-                            system(rmdir_cmd);
                         }
                     }
                 }
