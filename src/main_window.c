@@ -148,23 +148,13 @@ static void post_progress(int cur, int total, const char *fmt, ...)
 static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
-    int total = mod_list_count();
 
-    // 调试：把前几个模组名记下来
-    FILE *dbg = fopen("scan_debug.txt", "w");
-    if (dbg) {
-        fprintf(dbg, "scan_finished: total=%d\n", total);
-        for (int i = 0; i < (total > 5 ? 5 : total); i++) {
-            ModInfo *m = mod_list_get(i);
-            if (m) fprintf(dbg, "  [%d] name='%s' id='%s' ver='%s'\n",
-                    i, m->name, m->mod_id, m->local_version);
-        }
-        fclose(dbg);
-    }
-
+    // 先刷新视图再计总数（确保 UI 更新）
     mod_list_view_refresh();
     main_window_update_status();
     hide_progress();
+
+    int total = mod_list_count();
     AppState *state = app_get_state();
     state->is_scanning = FALSE;
 
@@ -196,140 +186,81 @@ static int count_jars(const char *dir)
     return count;
 }
 
+// ─── 写入调试日志（绝对路径，确保可写入） ───
+static void write_debug_log(const char *fname, const char *fmt, ...)
+{
+    char path[2048];
+    GetModuleFileNameA(NULL, path, sizeof(path));
+    char *p = strrchr(path, '\\');
+    if (p) *(p+1) = '\0';
+    else path[0] = '\0';
+    strncat(path, fname, sizeof(path) - strlen(path) - 1);
+
+    FILE *f = fopen(path, "a");
+    if (!f) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fclose(f);
+}
+
 static gpointer scan_thread_func(gpointer userdata)
 {
     ScanData *data = (ScanData *)userdata;
 
-    // 立即写 debug 日志 — 确认线程启动
-    FILE *dbg0 = fopen("scan_debug0.txt", "w");
-    if (dbg0) {
-        fprintf(dbg0, "scan_thread_func STARTED\n");
-        fprintf(dbg0, "mod_dir='%s'\n", data->mod_dir);
-        fclose(dbg0);
-    }
+    write_debug_log("scan_log.txt", "=== scan_thread STARTED ===\nmod_dir=%s\n", data->mod_dir);
 
     GPtrArray *mods = mod_list_get_all();
     mod_list_clear();
 
-    // 先列举 jar 数量用于进度条
-    int total_jars = count_jars(data->mod_dir);
-    data->total_files = total_jars;
-    data->scanned_count = 0;
-
-    // 写 debug — count_jars 结果
-    FILE *dbg1 = fopen("scan_debug1.txt", "w");
-    if (dbg1) {
-        fprintf(dbg1, "count_jars returned: %d\n", total_jars);
-        fclose(dbg1);
-    }
-
-    g_idle_add((GSourceFunc)show_progress, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
-
-    // 扫描目录内的 .jar 文件并逐个解析
-    DIR *dir = opendir(data->mod_dir);
-    if (!dir) {
-        FILE *de = fopen("scan_debug_dir.txt", "w");
-        if (de) { fprintf(de, "opendir FAILED for '%s'\n", data->mod_dir); fclose(de); }
-        g_idle_add(scan_finished_idle, NULL);
-        g_free(data);
-        return NULL;
-    }
-
-    FILE *dbg_jar = fopen("scan_debug_jars.txt", "w");
-    int scanned = 0;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        const char *name = entry->d_name;
-        // 跳过 . 和 ..
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
-        size_t len = strlen(name);
-        if (len < 4) {
-            if (dbg_jar) fprintf(dbg_jar, "SKIP-short: '%s'\n", name);
-            continue;
-        }
-        // 检查 .jar 后缀（不区分大小写）
-        const char *ext = name + len - 4;
-        int is_jar = 0;
-        if ((ext[0] == '.' || ext[0] == '.') &&
-            (ext[1] == 'j' || ext[1] == 'J') &&
-            (ext[2] == 'a' || ext[2] == 'A') &&
-            (ext[3] == 'r' || ext[3] == 'R')) is_jar = 1;
-        if (!is_jar) {
-            if (dbg_jar) fprintf(dbg_jar, "SKIP-ext: '%s' (ext=%.4s)\n", name, ext);
-            continue;
-        }
-
-        if (dbg_jar) fprintf(dbg_jar, "PROCESS: '%s'\n", name);
-
-        char full_path[2048];
-        snprintf(full_path, sizeof(full_path), "%s\\%s", data->mod_dir, name);
-
-        ModInfo info;
-        int ret = scanner_parse_jar(full_path, &info);
-        if (dbg_jar) fprintf(dbg_jar, "  parse_jar returned %d, name='%s', mod_id='%s'\n", ret, info.name, info.mod_id);
-        if (ret == 0) {
-            mod_list_add(&info);
-            scanned++;
-        }
-
-        // 更新进度条
-        data->scanned_count = scanned;
-        if (total_jars > 0) {
-            post_progress(scanned, total_jars, "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f... %d/%d", scanned, total_jars);
-        }
-    }
-    if (dbg_jar) { fprintf(dbg_jar, "SCAN DONE: scanned=%d\n", scanned); fclose(dbg_jar); }
-    closedir(dir);
+    // 扫描目录
+    int found = scanner_scan_directory(data->mod_dir, mods);
+    write_debug_log("scan_log.txt", "scanner_scan_directory returned: %d\n", found);
+    write_debug_log("scan_log.txt", "mod_list_count after scan: %d\n", mod_list_count());
 
     int total = mod_list_count();
+    g_idle_add((GSourceFunc)show_progress,
+        "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
 
-    // 无模组则直接刷新视图（显示空列表），跳过版本查询和缓存保存
-    if (total == 0) {
-        g_idle_add(scan_finished_idle, NULL);
-        g_free(data);
-        return NULL;
-    }
+    if (total > 0) {
+        // 版本查询
+        AppState *state = app_get_state();
+        post_progress(0, total, "\xe2\x8c\x9b \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac...");
 
-    // 版本查询阶段
-    AppState *state = app_get_state();
-    post_progress(0, total, "\xe2\x8c\x9b \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac...");
+        for (int i = 0; i < total; i++) {
+            ModInfo *mod = mod_list_get(i);
+            if (!mod) continue;
 
-    for (int i = 0; i < total; i++) {
-        ModInfo *mod = mod_list_get(i);
-        if (!mod) continue;
-
-        // 提取 MC 主版本号
-        char mc_ver[32] = "";
-        if (mod->mc_version[0]) {
-            const char *p = strchr(mod->mc_version, '.');
-            if (p) {
-                p = strchr(p+1, '.');
+            char mc_ver[32] = "";
+            if (mod->mc_version[0]) {
+                const char *p = strchr(mod->mc_version, '.');
                 if (p) {
-                    size_t n = p - mod->mc_version;
-                    if (n < sizeof(mc_ver)) strncpy(mc_ver, mod->mc_version, n);
+                    p = strchr(p+1, '.');
+                    if (p) {
+                        size_t n = p - mod->mc_version;
+                        if (n < sizeof(mc_ver)) strncpy(mc_ver, mod->mc_version, n);
+                    }
                 }
+                if (!mc_ver[0]) snprintf(mc_ver, sizeof(mc_ver), "%s", mod->mc_version);
             }
-            if (!mc_ver[0]) snprintf(mc_ver, sizeof(mc_ver), "%s", mod->mc_version);
-        }
 
-        // 尝试 Modrinth 查询
-        if (modrinth_query_version(mod, mc_ver[0]?mc_ver:NULL,
-                mod->loader[0]?mod->loader:NULL) == 0) {
+            if (modrinth_query_version(mod, mc_ver[0]?mc_ver:NULL,
+                    mod->loader[0]?mod->loader:NULL) == 0) {
+                post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
+                continue;
+            }
+
+            if (state->config.curseforge_api_key[0]) {
+                curseforge_query_version(mod, state->config.curseforge_api_key,
+                    mc_ver[0]?mc_ver:NULL);
+            }
             post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
-            continue;
         }
 
-        // 尝试 CurseForge 查询
-        if (state->config.curseforge_api_key[0]) {
-            curseforge_query_version(mod, state->config.curseforge_api_key,
-                mc_ver[0]?mc_ver:NULL);
-        }
-
-        post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
+        cache_save(mods);
     }
 
-    // 版本查询完成后再进行最终视图刷新
-    cache_save(mods);
     g_idle_add(scan_finished_idle, NULL);
     g_free(data);
     return NULL;
