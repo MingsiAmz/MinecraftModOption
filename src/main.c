@@ -30,11 +30,12 @@ static void write_debug_log(const char *fname, const char *fmt, ...)
 static gboolean auto_scan_finished(gpointer userdata)
 {
     (void)userdata;
+    write_debug_log("scan_log.txt", "auto_scan_finished: START, mod_list_count=%d\n", mod_list_count());
     mod_list_view_refresh();
     main_window_update_status();
     AppState *state = app_get_state();
     state->is_scanning = FALSE;
-    write_debug_log("scan_log.txt", "auto_scan_finished: is_scanning = FALSE\n");
+    write_debug_log("scan_log.txt", "auto_scan_finished: DONE\n");
     return G_SOURCE_REMOVE;
 }
 

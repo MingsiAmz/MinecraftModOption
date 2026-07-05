@@ -15,6 +15,10 @@
 #include <stdarg.h>
 #include <dirent.h>
 #include <windows.h>
+#include <stdarg.h>
+
+/* ─── 前向声明 ─── */
+static void write_debug_log(const char *fname, const char *fmt, ...);
 
 /* ─── 全局控件引用 ─── */
 static GtkWidget *window = NULL;
@@ -149,7 +153,9 @@ static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
 
-    // 先刷新视图再计总数（确保 UI 更新）
+    write_debug_log("scan_log.txt", "scan_finished_idle: START, mod_list_count=%d\n", mod_list_count());
+
+    // 强制刷新视图
     mod_list_view_refresh();
     main_window_update_status();
     hide_progress();
@@ -162,6 +168,8 @@ static gboolean scan_finished_idle(gpointer userdata)
     char msg[128];
     snprintf(msg, sizeof(msg), "\xe6\x89\xab\xe6\x8f\x8f\xe5\xae\x8c\xe6\x88\x90\xef\xbc\x8c\xe5\x85\xb1 %d \xe4\xb8\xaa\xe6\xa8\xa1\xe7\xbb\x84", total);
     gtk_label_set_text(GTK_LABEL(status_bar_label), msg);
+
+    write_debug_log("scan_log.txt", "scan_finished_idle: DONE, total=%d\n", total);
 
     return G_SOURCE_REMOVE;
 }
