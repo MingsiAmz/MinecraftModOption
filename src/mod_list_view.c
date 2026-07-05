@@ -40,7 +40,7 @@ static void format_size(long bytes, char *buf, size_t buf_size)
         snprintf(buf, buf_size, "%ld B", bytes);
 }
 
-/* ─── 复选框回调 ─── */
+/* ─── Checkbox toggle callback ─── */
 static void on_toggle_checked(GtkCellRendererToggle *cell, gchar *path_str, gpointer data)
 {
     (void)cell; (void)data;
@@ -54,7 +54,7 @@ static void on_toggle_checked(GtkCellRendererToggle *cell, gchar *path_str, gpoi
     gtk_tree_path_free(path);
 }
 
-/* ─── 创建视图 ─── */
+/* ─── Create view ─── */
 GtkWidget *mod_list_view_create(void)
 {
     GType types[] = {
@@ -182,7 +182,7 @@ void mod_list_view_select_all(gboolean select)
     }
 }
 
-/* ─── 搜索/筛选 ─── */
+/* ─── Search / Filter ─── */
 void mod_list_view_set_filter(const char *search_text, const char *filter)
 {
     if (!store) return;

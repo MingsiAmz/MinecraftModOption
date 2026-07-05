@@ -93,7 +93,7 @@ static void hide_progress(void)
     }
 }
 
-/* ═══════════════ 搜索与筛选 ═══════════════ */
+/* ═══════════════ Search & Filter ═══════════════ */
 static void on_search_changed(GtkEditable *editable, gpointer userdata)
 {
     (void)userdata;
@@ -109,69 +109,24 @@ static void on_filter_changed(GtkComboBox *combo, gpointer userdata)
     mod_list_view_set_filter(search, filter);
 }
 
-/* ═══════════════ 扫描 ═══════════════ */
+/* ═══════════════ Scan ═══════════════ */
 typedef struct {
     char mod_dir[1024];
-    int total_files;       // 总共要扫描的 jar 数（先列举，存这里）
-    int scanned_count;     // 已扫描计数（线程安全：只由扫描线程写）
 } ScanData;
 
-// 进度更新数据结构 — 从扫描线程传给 idle 回调
-typedef struct {
-    int current;
-    int total;
-    char text[64];
-} ProgressUpdate;
-
-static gboolean progress_update_idle(gpointer userdata)
-{
-    ProgressUpdate *pu = (ProgressUpdate *)userdata;
-    if (progress_bar && pu->total > 0) {
-        double frac = (double)pu->current / pu->total;
-        if (frac > 1.0) frac = 1.0;
-        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), frac);
-        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), pu->text);
-    }
-    g_free(pu);
-    return G_SOURCE_REMOVE;
-}
-
-static void post_progress(int cur, int total, const char *fmt, ...)
-{
-    ProgressUpdate *pu = g_new(ProgressUpdate, 1);
-    pu->current = cur;
-    pu->total = total;
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(pu->text, sizeof(pu->text), fmt, ap);
-    va_end(ap);
-    g_idle_add(progress_update_idle, pu);
-}
-
-// 扫描完成时的 idle 回调 — 先快速显示列表
+/* Idle: show list immediately after scan */
 static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
-
-    write_debug_log("scan_log.txt", "scan_finished_idle: START, mod_list_count=%d\n", mod_list_count());
-
-    // 强制刷新视图（首次显示列表）
     mod_list_view_refresh();
     main_window_update_status();
-
-    write_debug_log("scan_log.txt", "scan_finished_idle: DONE, total=%d\n", mod_list_count());
-
     return G_SOURCE_REMOVE;
 }
 
-// 版本查询完成的 idle 回调
+/* Idle: version check done, unlock scan button */
 static gboolean version_check_finished_idle(gpointer userdata)
 {
     (void)userdata;
-
-    write_debug_log("scan_log.txt", "version_check_finished_idle: START\n");
-
-    // 刷新视图以显示版本状态
     mod_list_view_refresh();
     main_window_update_status();
     hide_progress();
@@ -180,15 +135,12 @@ static gboolean version_check_finished_idle(gpointer userdata)
     state->is_scanning = FALSE;
 
     char msg[128];
-    snprintf(msg, sizeof(msg), "\xe6\x89\xab\xe6\x8f\x8f\xe5\xae\x8c\xe6\x88\x90\xef\xbc\x8c\xe5\x85\xb1 %d \xe4\xb8\xaa\xe6\xa8\xa1\xe7\xbb\x84", mod_list_count());
+    snprintf(msg, sizeof(msg), "Scan complete: %d mods", mod_list_count());
     gtk_label_set_text(GTK_LABEL(status_bar_label), msg);
-
-    write_debug_log("scan_log.txt", "version_check_finished_idle: DONE\n");
-
     return G_SOURCE_REMOVE;
 }
 
-// 预先列举 jar 文件数量
+/* Count .jar files in directory (reference only) */
 static int count_jars(const char *dir)
 {
     int count = 0;
@@ -236,7 +188,7 @@ static gpointer scan_thread_func(gpointer userdata)
     // 第一步：列举目录中所有 .jar 文件（只用文件名，不解析 jar 内部）
     mod_list_clear();
 
-    // 使用 FindFirstFile/FindNextFile（最可靠的 Windows API）
+    /* List .jars via FindFirstFile (fast, no jar parsing) */
     int jar_count = 0;
     char pattern[1030];
     snprintf(pattern, sizeof(pattern), "%s\\*.jar", data->mod_dir);
@@ -314,7 +266,7 @@ static gpointer scan_thread_func(gpointer userdata)
         cache_save(mods);
     }
 
-    // ─── 版本查询完成后刷新 UI ───
+    /* Refresh UI after version queries */
     g_idle_add(version_check_finished_idle, NULL);
 
     g_free(data);
@@ -332,7 +284,20 @@ static void on_scan_clicked(GtkButton *btn, gpointer userdata)
     g_thread_new("scan", scan_thread_func, d);
 }
 
-/* ═══════════════ 更新 ═══════════════ */
+/* ═══════════════ Select All / None ═══════════════ */
+static void on_select_all_clicked(GtkButton *btn, gpointer userdata)
+{
+    (void)btn; (void)userdata;
+    mod_list_view_select_all(TRUE);
+}
+
+static void on_deselect_all_clicked(GtkButton *btn, gpointer userdata)
+{
+    (void)btn; (void)userdata;
+    mod_list_view_select_all(FALSE);
+}
+
+/* ═══════════════ Update ═══════════════ */
 typedef struct { int *indices; int count; } UpdateData;
 
 static gboolean update_show_result_cb(gpointer userdata)
@@ -454,7 +419,7 @@ static void on_update_all_clicked(GtkButton *btn, gpointer userdata)
     g_thread_new("update-all", update_thread_func, d);
 }
 
-/* ═══════════════ 删除 ═══════════════ */
+/* ═══════════════ Delete ═══════════════ */
 static void on_delete_clicked(GtkButton *btn, gpointer userdata)
 {
     (void)btn; (void)userdata;
@@ -479,7 +444,7 @@ static void on_delete_clicked(GtkButton *btn, gpointer userdata)
     g_free(indices);
 }
 
-/* ═══════════════ 设置 ═══════════════ */
+/* ═══════════════ Settings ═══════════════ */
 static void on_settings_clicked(GtkButton *btn, gpointer userdata)
 {
     (void)btn; (void)userdata;
@@ -493,7 +458,7 @@ static void on_settings_clicked(GtkButton *btn, gpointer userdata)
     }
 }
 
-/* ═══════════════ 回滚 ═══════════════ */
+/* ═══════════════ Rollback ═══════════════ */
 static void on_rollback_clicked(GtkButton *btn, gpointer userdata)
 {
     (void)btn; (void)userdata;
@@ -521,7 +486,7 @@ static void on_rollback_clicked(GtkButton *btn, gpointer userdata)
     g_free(indices);
 }
 
-/* ═══════════════ 键盘快捷键 ═══════════════ */
+/* ═══════════════ Keyboard Shortcuts ═══════════════ */
 static gboolean on_key_pressed(GtkEventControllerKey *controller,
                                 guint keyval, guint keycode, GdkModifierType state,
                                 gpointer userdata)
@@ -529,29 +494,29 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller,
     (void)controller; (void)keycode; (void)userdata;
 
     if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_a) {
-        // Ctrl+A: 全选
+        // Ctrl+A: select all
         mod_list_view_select_all(TRUE);
         return GDK_EVENT_STOP;
     }
     if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_d) {
-        // Ctrl+D: 取消全选
+        // Ctrl+D: deselect all
         mod_list_view_select_all(FALSE);
         return GDK_EVENT_STOP;
     }
     if (keyval == GDK_KEY_Delete || keyval == GDK_KEY_KP_Delete) {
-        // Delete: 删除选中
+        // Delete: delete selected
         on_delete_clicked(NULL, NULL);
         return GDK_EVENT_STOP;
     }
     if (keyval == GDK_KEY_F5) {
-        // F5: 刷新扫描
+        // F5: rescan
         on_scan_clicked(NULL, NULL);
         return GDK_EVENT_STOP;
     }
     return GDK_EVENT_PROPAGATE;
 }
 
-/* ═══════════════ 双击详情 ═══════════════ */
+/* ═══════════════ Double-click Detail ═══════════════ */
 static void on_row_activated(GtkTreeView *tv, GtkTreePath *path,
                               GtkTreeViewColumn *col, gpointer userdata)
 {
@@ -565,7 +530,7 @@ static void on_row_activated(GtkTreeView *tv, GtkTreePath *path,
     }
 }
 
-/* ═══════════════ 创建主窗口 ═══════════════ */
+/* ═══════════════ Create Main Window ═══════════════ */
 GtkWidget *main_window_create(void)
 {
     window = gtk_window_new();
@@ -590,9 +555,13 @@ GtkWidget *main_window_create(void)
     GtkWidget *b_upd_all = gtk_button_new_with_label("\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0\xe5\x85\xa8\xe9\x83\xa8");
     GtkWidget *b_roll   = gtk_button_new_with_label("\xe2\x86\xa9 \xe5\x9b\x9e\xe6\xbb\x9a");
     GtkWidget *b_del    = gtk_button_new_with_label("\xf0\x9f\x97\x91 \xe5\x88\xa0\xe9\x99\xa4");
+    GtkWidget *b_sel_all  = gtk_button_new_with_label("\xe2\x98\x91 All");
+    GtkWidget *b_sel_none = gtk_button_new_with_label("\xe2\x98\x90 None");
+    gtk_widget_set_name(b_sel_all, "btn-sel-all");
+    gtk_widget_set_name(b_sel_none, "btn-sel-none");
     GtkWidget *b_set    = gtk_button_new_with_label("\xe2\x9a\x99 \xe8\xae\xbe\xe7\xbd\xae");
 
-    // 为每个按钮设置 CSS name，以便精确覆盖样式
+    // 为每个按钮Settings CSS name，以便精确覆盖样式
     gtk_widget_set_name(b_scan,    "btn-scan");
     gtk_widget_set_name(b_upd_sel, "btn-upd-sel");
     gtk_widget_set_name(b_upd_all, "btn-upd-all");
@@ -600,7 +569,7 @@ GtkWidget *main_window_create(void)
     gtk_widget_set_name(b_del,     "btn-del");
     gtk_widget_set_name(b_set,     "btn-set");
 
-    // 为按钮设置 tooltip（快捷键提示）
+    // 为按钮Settings tooltip（快捷键提示）
     gtk_widget_set_tooltip_text(b_scan, "\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84\xe7\x9b\xae\xe5\xbd\x95 (F5)");
     gtk_widget_set_tooltip_text(b_del, "\xe5\x88\xa0\xe9\x99\xa4\xe5\x8b\xbe\xe9\x80\x89\xe7\x9a\x84\xe6\xa8\xa1\xe7\xbb\x84 (Delete)");
 
@@ -608,6 +577,9 @@ GtkWidget *main_window_create(void)
     gtk_box_append(GTK_BOX(tb), b_upd_sel);
     gtk_box_append(GTK_BOX(tb), b_upd_all);
     gtk_box_append(GTK_BOX(tb), b_roll);
+    gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
+    gtk_box_append(GTK_BOX(tb), b_sel_all);
+    gtk_box_append(GTK_BOX(tb), b_sel_none);
     gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
     gtk_box_append(GTK_BOX(tb), b_del);
     gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
@@ -685,6 +657,8 @@ GtkWidget *main_window_create(void)
     g_signal_connect(b_upd_sel, "clicked", G_CALLBACK(on_update_sel_clicked), NULL);
     g_signal_connect(b_upd_all, "clicked", G_CALLBACK(on_update_all_clicked), NULL);
     g_signal_connect(b_roll,    "clicked", G_CALLBACK(on_rollback_clicked), NULL);
+    g_signal_connect(b_sel_all, "clicked", G_CALLBACK(on_select_all_clicked), NULL);
+    g_signal_connect(b_sel_none,"clicked", G_CALLBACK(on_deselect_all_clicked), NULL);
     g_signal_connect(b_del,     "clicked", G_CALLBACK(on_delete_clicked), NULL);
     g_signal_connect(b_set,     "clicked", G_CALLBACK(on_settings_clicked), NULL);
 
@@ -694,7 +668,7 @@ GtkWidget *main_window_create(void)
 
     g_signal_connect(list, "row-activated", G_CALLBACK(on_row_activated), NULL);
 
-    /* ─── 键盘快捷键 ─── */
+    /* ─── Keyboard Shortcuts ─── */
     GtkEventController *key_controller = gtk_event_controller_key_new();
     gtk_widget_add_controller(window, key_controller);
     g_signal_connect(key_controller, "key-pressed",
