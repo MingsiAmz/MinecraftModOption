@@ -90,6 +90,10 @@ static gpointer auto_scan_thread(gpointer userdata)
 
     write_debug_log("scan_log.txt", "auto_scan: jars found=%d, mod_list_count=%d\n", jar_count, mod_list_count());
 
+    // 立即刷新 UI 显示列表
+    g_idle_add(auto_scan_finished, NULL);
+
+    // 后台版本查询
     if (jar_count > 0) {
         GPtrArray *mods = mod_list_get_all();
         for (int i = 0; i < mod_list_count(); i++) {
@@ -100,7 +104,6 @@ static gpointer auto_scan_thread(gpointer userdata)
         cache_save(mods);
     }
 
-    g_idle_add(auto_scan_finished, NULL);
     g_free(dir);
     return NULL;
 }

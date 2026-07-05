@@ -148,28 +148,42 @@ static void post_progress(int cur, int total, const char *fmt, ...)
     g_idle_add(progress_update_idle, pu);
 }
 
-// 扫描完成时的 idle 回调
+// 扫描完成时的 idle 回调 — 先快速显示列表
 static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
 
     write_debug_log("scan_log.txt", "scan_finished_idle: START, mod_list_count=%d\n", mod_list_count());
 
-    // 强制刷新视图
+    // 强制刷新视图（首次显示列表）
+    mod_list_view_refresh();
+    main_window_update_status();
+
+    write_debug_log("scan_log.txt", "scan_finished_idle: DONE, total=%d\n", mod_list_count());
+
+    return G_SOURCE_REMOVE;
+}
+
+// 版本查询完成的 idle 回调
+static gboolean version_check_finished_idle(gpointer userdata)
+{
+    (void)userdata;
+
+    write_debug_log("scan_log.txt", "version_check_finished_idle: START\n");
+
+    // 刷新视图以显示版本状态
     mod_list_view_refresh();
     main_window_update_status();
     hide_progress();
 
-    int total = mod_list_count();
     AppState *state = app_get_state();
     state->is_scanning = FALSE;
 
-    // 扫描完成提示
     char msg[128];
-    snprintf(msg, sizeof(msg), "\xe6\x89\xab\xe6\x8f\x8f\xe5\xae\x8c\xe6\x88\x90\xef\xbc\x8c\xe5\x85\xb1 %d \xe4\xb8\xaa\xe6\xa8\xa1\xe7\xbb\x84", total);
+    snprintf(msg, sizeof(msg), "\xe6\x89\xab\xe6\x8f\x8f\xe5\xae\x8c\xe6\x88\x90\xef\xbc\x8c\xe5\x85\xb1 %d \xe4\xb8\xaa\xe6\xa8\xa1\xe7\xbb\x84", mod_list_count());
     gtk_label_set_text(GTK_LABEL(status_bar_label), msg);
 
-    write_debug_log("scan_log.txt", "scan_finished_idle: DONE, total=%d\n", total);
+    write_debug_log("scan_log.txt", "version_check_finished_idle: DONE\n");
 
     return G_SOURCE_REMOVE;
 }
@@ -241,7 +255,6 @@ static gpointer scan_thread_func(gpointer userdata)
             memset(&info, 0, sizeof(info));
             snprintf(info.file_name, sizeof(info.file_name), "%s", ffd.cFileName);
             snprintf(info.file_path, sizeof(info.file_path), "%s", full_path);
-            // 只取低32位（对 4GB+ 文件截断，模组 jar 通常远小于 4GB）
             info.file_size = (long)(ffd.nFileSizeLow);
             info.status = MOD_STATUS_UNKNOWN;
 
@@ -255,9 +268,6 @@ static gpointer scan_thread_func(gpointer userdata)
 
             mod_list_add(&info);
             jar_count++;
-
-            // 更新进度
-            write_debug_log("scan_log.txt", "  added: %s\n", ffd.cFileName);
         } while (FindNextFileA(hFind, &ffd) != 0);
         FindClose(hFind);
     }
@@ -266,13 +276,13 @@ static gpointer scan_thread_func(gpointer userdata)
     write_debug_log("scan_log.txt", "mod_list_count: %d\n", mod_list_count());
 
     int total = mod_list_count();
-    g_idle_add((GSourceFunc)show_progress,
-        "\xf0\x9f\x94\x8d \xe6\xad\xa3\xe5\x9c\xa8\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84...");
 
+    // ─── 立即刷新 UI 显示列表（不等版本查询） ───
+    g_idle_add(scan_finished_idle, NULL);
+
+    // ─── 后台版本查询 ───
     if (total > 0) {
-        // 版本查询
         AppState *state = app_get_state();
-        post_progress(0, total, "\xe2\x8c\x9b \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac...");
 
         for (int i = 0; i < total; i++) {
             ModInfo *mod = mod_list_get(i);
@@ -291,24 +301,22 @@ static gpointer scan_thread_func(gpointer userdata)
                 if (!mc_ver[0]) snprintf(mc_ver, sizeof(mc_ver), "%s", mod->mc_version);
             }
 
-            if (modrinth_query_version(mod, mc_ver[0]?mc_ver:NULL,
-                    mod->loader[0]?mod->loader:NULL) == 0) {
-                post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
-                continue;
-            }
+            modrinth_query_version(mod, mc_ver[0]?mc_ver:NULL,
+                    mod->loader[0]?mod->loader:NULL);
 
             if (state->config.curseforge_api_key[0]) {
                 curseforge_query_version(mod, state->config.curseforge_api_key,
                     mc_ver[0]?mc_ver:NULL);
             }
-            post_progress(i+1, total, "\xe2\x8c\x9b \xe6\x9f\xa5\xe8\xaf\xa2\xe7\x89\x88\xe6\x9c\xac... %d/%d", i+1, total);
         }
 
         GPtrArray *mods = mod_list_get_all();
         cache_save(mods);
     }
 
-    g_idle_add(scan_finished_idle, NULL);
+    // ─── 版本查询完成后刷新 UI ───
+    g_idle_add(version_check_finished_idle, NULL);
+
     g_free(data);
     return NULL;
 }
