@@ -134,9 +134,6 @@ static gboolean version_check_finished_idle(gpointer userdata)
     AppState *state = app_get_state();
     state->is_scanning = FALSE;
 
-    char msg[128];
-    snprintf(msg, sizeof(msg), "Scan complete: %d mods", mod_list_count());
-    gtk_label_set_text(GTK_LABEL(status_bar_label), msg);
     return G_SOURCE_REMOVE;
 }
 
@@ -287,11 +284,9 @@ static void on_scan_clicked(GtkButton *btn, gpointer userdata)
 /* ═══════════════ Select Toggle ═══════════════ */
 static void on_select_toggle_clicked(GtkButton *btn, gpointer userdata)
 {
-    (void)userdata;
+    (void)btn; (void)userdata;
     gboolean any_checked = mod_list_view_has_any_checked();
     mod_list_view_select_all(!any_checked);
-    const char *label = any_checked ? "\xe2\x98\x90 \xe5\x8f\x96\xe6\xb6\x88\xe5\x85\xa8\xe9\x80\x89" : "\xe2\x98\x91 \xe5\x85\xa8\xe9\x80\x89";
-    gtk_button_set_label(btn, label);
 }
 
 /* ═══════════════ Update ═══════════════ */
