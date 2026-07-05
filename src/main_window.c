@@ -114,12 +114,37 @@ typedef struct {
     char mod_dir[1024];
 } ScanData;
 
+typedef struct {
+    int current;
+    int total;
+} VersionProgress;
+
 /* Idle: show list immediately after scan */
 static gboolean scan_finished_idle(gpointer userdata)
 {
     (void)userdata;
     mod_list_view_refresh();
     main_window_update_status();
+    return G_SOURCE_REMOVE;
+}
+
+/* Idle: show progress bar with text */
+static gboolean show_progress_idle(gpointer userdata)
+{
+    show_progress((const char *)userdata);
+    g_free(userdata);
+    return G_SOURCE_REMOVE;
+}
+
+/* Idle: update version check progress */
+static gboolean version_progress_idle(gpointer userdata)
+{
+    VersionProgress *p = (VersionProgress *)userdata;
+    double frac = (p->total > 0) ? (double)p->current / p->total : 0.0;
+    char text[128];
+    snprintf(text, sizeof(text), "正在查询版本... %d/%d", p->current, p->total);
+    set_progress(frac, text);
+    g_free(p);
     return G_SOURCE_REMOVE;
 }
 
@@ -232,10 +257,18 @@ static gpointer scan_thread_func(gpointer userdata)
     // ─── 后台版本查询 ───
     if (total > 0) {
         AppState *state = app_get_state();
+        g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, show_progress_idle,
+            g_strdup("正在查询版本..."), NULL);
 
         for (int i = 0; i < total; i++) {
             ModInfo *mod = mod_list_get(i);
             if (!mod) continue;
+
+            // 更新进度
+            VersionProgress *vp = g_new(VersionProgress, 1);
+            vp->current = i + 1;
+            vp->total = total;
+            g_idle_add(version_progress_idle, vp);
 
             char mc_ver[32] = "";
             if (mod->mc_version[0]) {
