@@ -737,7 +737,7 @@ static void on_dir_clicked(GtkButton *btn, gpointer userdata)
 GtkWidget *main_window_create(void)
 {
     window = gtk_window_new();
-    gtk_window_set_title(GTK_WINDOW(window), "\xe2\x9d\x84 Minecraft Mod Manager");
+    gtk_window_set_title(GTK_WINDOW(window), APP_NAME);
     gtk_window_set_default_size(GTK_WINDOW(window), 1000, 680);
     gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
 
