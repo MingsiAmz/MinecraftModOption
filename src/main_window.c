@@ -40,7 +40,7 @@ void main_window_update_status(void)
 
     GString *s = g_string_sized_new(256);
     g_string_append_printf(s,
-        "\xf0\x9f\x93\x81 \xe6\xa8\xa1\xe7\xbb\x84: %d \xe4\xb8\xaa  \xe2\x94\x82  "
+        "\xe6\xa8\xa1\xe7\xbb\x84: %d \xe4\xb8\xaa  \xe2\x94\x82  "
         "\xe2\xac\x86 \xe5\x8f\xaf\xe6\x9b\xb4\xe6\x96\xb0: %d \xe4\xb8\xaa",
         total, updates);
 
@@ -662,7 +662,7 @@ static void on_row_activated(GtkTreeView *tv, GtkTreePath *path,
 GtkWidget *main_window_create(void)
 {
     window = gtk_window_new();
-    gtk_window_set_title(GTK_WINDOW(window), "\xf0\x9f\xa7\x8a Minecraft Mod Manager");
+    gtk_window_set_title(GTK_WINDOW(window), "\xe2\x9d\x84 Minecraft Mod Manager");
     gtk_window_set_default_size(GTK_WINDOW(window), 1000, 680);
     gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
 
@@ -678,14 +678,14 @@ GtkWidget *main_window_create(void)
     gtk_widget_set_margin_top(tb, 8);
     gtk_widget_set_margin_bottom(tb, 4);
 
-    GtkWidget *b_scan   = gtk_button_new_with_label("\xf0\x9f\x94\x8d \xe6\x89\xab\xe6\x8f\x8f");
+    GtkWidget *b_scan   = gtk_button_new_with_label("\xe6\x89\xab\xe6\x8f\x8f");
     GtkWidget *b_upd_sel = gtk_button_new_with_label("\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0\xe9\x80\x89\xe4\xb8\xad");
     GtkWidget *b_upd_all = gtk_button_new_with_label("\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0\xe5\x85\xa8\xe9\x83\xa8");
     GtkWidget *b_roll   = gtk_button_new_with_label("\xe2\x86\xa9 \xe5\x9b\x9e\xe6\xbb\x9a");
-    GtkWidget *b_del    = gtk_button_new_with_label("\xf0\x9f\x97\x91 \xe5\x88\xa0\xe9\x99\xa4");
+    GtkWidget *b_del    = gtk_button_new_with_label("\xe5\x88\xa0\xe9\x99\xa4");
     GtkWidget *b_sel_tog = gtk_button_new_with_label("\xe2\x98\x91 \xe5\x85\xa8\xe9\x80\x89");
     gtk_widget_set_name(b_sel_tog, "btn-sel-tog");
-    GtkWidget *b_set    = gtk_button_new_with_label("\xe2\x9a\x99 \xe8\xae\xbe\xe7\xbd\xae");
+    GtkWidget *b_set    = gtk_button_new_with_label("\xe8\xae\xbe\xe7\xbd\xae");
 
     // 为每个按钮Settings CSS name，以便精确覆盖样式
     gtk_widget_set_name(b_scan,    "btn-scan");

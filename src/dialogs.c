@@ -200,9 +200,9 @@ void dialogs_show_mod_detail(GtkWindow *parent, const ModInfo *mod)
 
     const char *source_str = mod->source == MOD_SOURCE_CURSEFORGE ? "CurseForge" :
                              mod->source == MOD_SOURCE_MODRINTH ? "Modrinth" : "未知";
-    const char *status_str = mod->status == MOD_STATUS_UP_TO_DATE ? "✅ 最新" :
+    const char *status_str = mod->status == MOD_STATUS_UP_TO_DATE ? "✔ 最新" :
                              mod->status == MOD_STATUS_UPDATE_AVAIL ? "⬆ 可更新" :
-                             mod->status == MOD_STATUS_UNKNOWN ? "⚠ 未匹配" : "❌ 错误";
+                             mod->status == MOD_STATUS_UNKNOWN ? "⚠ 未匹配" : "✖ 错误";
 
     char size_buf[32];
     if (mod->file_size > 1024*1024)

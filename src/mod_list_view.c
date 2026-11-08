@@ -13,10 +13,10 @@ static GtkListStore *store = NULL;
 static const char *status_text(int status)
 {
     switch (status) {
-        case MOD_STATUS_UP_TO_DATE:   return "\xe2\x9c\x85 \xe6\x9c\x80\xe6\x96\xb0";
+        case MOD_STATUS_UP_TO_DATE:   return "\xe2\x9c\x94 \xe6\x9c\x80\xe6\x96\xb0";
         case MOD_STATUS_UPDATE_AVAIL: return "\xe2\xac\x86 \xe5\x8f\xaf\xe6\x9b\xb4\xe6\x96\xb0";
         case MOD_STATUS_UNKNOWN:      return "\xe2\x9a\xa0 \xe6\x9c\xaa\xe5\x8c\xb9\xe9\x85\x8d";
-        case MOD_STATUS_ERROR:        return "\xe2\x9d\x8c \xe9\x94\x99\xe8\xaf\xaf";
+        case MOD_STATUS_ERROR:        return "\xe2\x9c\x96 \xe9\x94\x99\xe8\xaf\xaf";
         default: return "\xe6\x9c\xaa\xe7\x9f\xa5";
     }
 }
