@@ -28,6 +28,21 @@ static GtkWidget *status_bar_label = NULL;
 static GtkWidget *progress_bar = NULL;
 static GtkWidget *search_entry = NULL;
 static GtkWidget *filter_combo = NULL;
+static GtkWidget *dir_button = NULL;
+
+/* 目录的简短展示：路径太长时只保留末级目录名 */
+static void shorten_dir_name(const char *dir, char *out, size_t out_size)
+{
+    const char *last = strrchr(dir, '\\');
+    if (!last) last = strrchr(dir, '/');
+    if (last) last++;
+    else last = dir;
+
+    if (strlen(dir) > 60)
+        snprintf(out, out_size, "...%s", last);
+    else
+        snprintf(out, out_size, "%s", dir);
+}
 
 /* ─── 状态栏更新 ─── */
 void main_window_update_status(void)
@@ -46,19 +61,9 @@ void main_window_update_status(void)
 
     // 如果目录有效，显示目录名（缩写）
     if (state->config.mod_dir[0]) {
-        const char *dir = state->config.mod_dir;
-        const char *last = strrchr(dir, '\\');
-        if (!last) last = strrchr(dir, '/');
-        if (last) last++;
-        else last = dir;
-
         char dir_str[128];
-        int dlen = strlen(dir);
-        if (dlen > 60) {
-            snprintf(dir_str, sizeof(dir_str), "...%s", last);
-        } else {
-            snprintf(dir_str, sizeof(dir_str), "%s", dir);
-        }
+        shorten_dir_name(state->config.mod_dir, dir_str, sizeof(dir_str));
+
         GString *tmp = g_string_new(dir_str);
         g_string_append(tmp, "  \xe2\x94\x82  ");
         g_string_append(tmp, s->str);
@@ -406,15 +411,20 @@ static gpointer scan_thread_func(gpointer userdata)
     return NULL;
 }
 
-static void on_scan_clicked(GtkButton *btn, gpointer userdata)
+/* 启动一次扫描（已有扫描在进行时直接返回） */
+static void main_window_start_scan(AppState *state)
 {
-    (void)btn; (void)userdata;
-    AppState *state = app_get_state();
     if (state->is_scanning) return;
     state->is_scanning = TRUE;
     ScanData *d = g_new(ScanData, 1);
     snprintf(d->mod_dir, sizeof(d->mod_dir), "%s", state->config.mod_dir);
     g_thread_new("scan", scan_thread_func, d);
+}
+
+static void on_scan_clicked(GtkButton *btn, gpointer userdata)
+{
+    (void)btn; (void)userdata;
+    main_window_start_scan(app_get_state());
 }
 
 /* ═══════════════ Select Toggle ═══════════════ */
@@ -577,13 +587,8 @@ static void on_settings_clicked(GtkButton *btn, gpointer userdata)
 {
     (void)btn; (void)userdata;
     AppState *state = app_get_state();
-    AppConfig old = state->config;
-    if (dialogs_show_settings(GTK_WINDOW(window), &state->config)) {
-        config_save(&state->config);
-        main_window_update_status();
-    } else {
-        state->config = old;
-    }
+    dialogs_show_settings(GTK_WINDOW(window), &state->config);
+    main_window_update_status();
 }
 
 /* ═══════════════ Rollback ═══════════════ */
@@ -658,6 +663,76 @@ static void on_row_activated(GtkTreeView *tv, GtkTreePath *path,
     }
 }
 
+/* ═══════════════ 模组目录选择（工具栏） ═══════════════ */
+static void main_window_update_dir_button(void)
+{
+    if (!dir_button) return;
+
+    AppState *state = app_get_state();
+    const char *dir = state->config.mod_dir;
+    const char *last = strrchr(dir, '\\');
+    if (!last) last = strrchr(dir, '/');
+    if (last) last++;
+    else last = dir;
+
+    char shown[64];
+    if (dir[0])
+        snprintf(shown, sizeof(shown), "目录: %s", last);
+    else
+        snprintf(shown, sizeof(shown), "选择目录");
+
+    gtk_button_set_label(GTK_BUTTON(dir_button), shown);
+    gtk_widget_set_tooltip_text(dir_button, dir[0] ? dir : "选择存放模组的目录");
+}
+
+static void on_dir_chosen(GObject *source, GAsyncResult *result, gpointer userdata)
+{
+    (void)userdata;
+    GError *error = NULL;
+    GFile *folder = gtk_file_dialog_select_folder_finish(GTK_FILE_DIALOG(source),
+                                                         result, &error);
+
+    if (folder) {
+        char *path = g_file_get_path(folder);
+        if (path) {
+            AppState *state = app_get_state();
+            if (g_strcmp0(path, state->config.mod_dir) != 0) {
+                snprintf(state->config.mod_dir, sizeof(state->config.mod_dir), "%s", path);
+                config_save(&state->config);
+                main_window_update_dir_button();
+
+                /* 目录变了：清空旧结果并按新目录重新扫描 */
+                mod_list_clear();
+                mod_list_view_refresh();
+                main_window_update_status();
+                main_window_start_scan(state);
+            }
+            g_free(path);
+        }
+        g_object_unref(folder);
+    }
+    /* 用户取消时返回 GTK_DIALOG_ERROR_DISMISSED，无需处理 */
+    g_clear_error(&error);
+}
+
+static void on_dir_clicked(GtkButton *btn, gpointer userdata)
+{
+    (void)btn; (void)userdata;
+    AppState *state = app_get_state();
+
+    GtkFileDialog *dialog = gtk_file_dialog_new();
+    gtk_file_dialog_set_title(dialog, "选择模组目录");
+
+    if (state->config.mod_dir[0]) {
+        GFile *initial = g_file_new_for_path(state->config.mod_dir);
+        gtk_file_dialog_set_initial_folder(dialog, initial);
+        g_object_unref(initial);
+    }
+
+    gtk_file_dialog_select_folder(dialog, GTK_WINDOW(window), NULL, on_dir_chosen, NULL);
+    g_object_unref(dialog);
+}
+
 /* ═══════════════ Create Main Window ═══════════════ */
 GtkWidget *main_window_create(void)
 {
@@ -698,6 +773,14 @@ GtkWidget *main_window_create(void)
     // 为按钮Settings tooltip（快捷键提示）
     gtk_widget_set_tooltip_text(b_scan, "\xe6\x89\xab\xe6\x8f\x8f\xe6\xa8\xa1\xe7\xbb\x84\xe7\x9b\xae\xe5\xbd\x95 (F5)");
     gtk_widget_set_tooltip_text(b_del, "\xe5\x88\xa0\xe9\x99\xa4\xe5\x8b\xbe\xe9\x80\x89\xe7\x9a\x84\xe6\xa8\xa1\xe7\xbb\x84 (Delete)");
+
+    /* 模组目录选择（位于「扫描」左侧） */
+    dir_button = gtk_button_new_with_label("");
+    gtk_widget_set_name(dir_button, "btn-dir");
+    g_signal_connect(dir_button, "clicked", G_CALLBACK(on_dir_clicked), NULL);
+    gtk_box_append(GTK_BOX(tb), dir_button);
+    gtk_box_append(GTK_BOX(tb), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
+    main_window_update_dir_button();
 
     gtk_box_append(GTK_BOX(tb), b_scan);
     gtk_box_append(GTK_BOX(tb), b_upd_sel);

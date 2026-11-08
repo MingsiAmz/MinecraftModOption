@@ -74,6 +74,64 @@ static GtkWidget *add_labeled_row(GtkWidget *box, const char *label_text, GtkWid
     return hbox;
 }
 
+/* ─── 目录选择：回调把选中的文件夹写回输入框 ─── */
+static void on_folder_chosen(GObject *source, GAsyncResult *result, gpointer userdata)
+{
+    GtkWidget *entry = GTK_WIDGET(userdata);
+    GError *error = NULL;
+    GFile *folder = gtk_file_dialog_select_folder_finish(GTK_FILE_DIALOG(source),
+                                                         result, &error);
+
+    if (folder) {
+        char *path = g_file_get_path(folder);
+        if (path) {
+            gtk_editable_set_text(GTK_EDITABLE(entry), path);
+            g_free(path);
+        }
+        g_object_unref(folder);
+    }
+    /* 用户取消时返回 GTK_DIALOG_ERROR_DISMISSED，忽略即可 */
+    g_clear_error(&error);
+    g_object_unref(entry); /* 对应 on_browse_clicked 里的 g_object_ref */
+}
+
+static void on_browse_clicked(GtkButton *btn, gpointer userdata)
+{
+    (void)btn;
+    GtkWidget *entry = GTK_WIDGET(userdata);
+    GtkFileDialog *dialog = gtk_file_dialog_new();
+    gtk_file_dialog_set_title(dialog, "选择目录");
+
+    const char *current = gtk_editable_get_text(GTK_EDITABLE(entry));
+    if (current && current[0]) {
+        GFile *initial = g_file_new_for_path(current);
+        gtk_file_dialog_set_initial_folder(dialog, initial);
+        g_object_unref(initial);
+    }
+
+    gtk_file_dialog_select_folder(dialog,
+                                  GTK_WINDOW(gtk_widget_get_root(entry)),
+                                  NULL, on_folder_chosen, g_object_ref(entry));
+    g_object_unref(dialog);
+}
+
+/* ─── 辅助：输入框 + 「浏览…」按钮 ─── */
+static GtkWidget *make_dir_picker(GtkWidget *entry)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_hexpand(box, TRUE);
+
+    GtkWidget *btn = gtk_button_new_with_label("浏览…");
+    gtk_widget_set_name(btn, "settings-browse-btn");
+    gtk_widget_set_tooltip_text(btn, "选择目录");
+    g_signal_connect(btn, "clicked", G_CALLBACK(on_browse_clicked), entry);
+
+    gtk_widget_set_hexpand(entry, TRUE);
+    gtk_box_append(GTK_BOX(box), entry);
+    gtk_box_append(GTK_BOX(box), btn);
+    return box;
+}
+
 /* ─── 保存设置回调 ─── */
 static void on_settings_save(GtkButton *btn, GtkWindow *dialog)
 {
@@ -81,15 +139,12 @@ static void on_settings_save(GtkButton *btn, GtkWindow *dialog)
     AppConfig *config = (AppConfig *)g_object_get_data(G_OBJECT(dialog), "config");
     if (!config) return;
 
-    GtkWidget *mod_dir_e = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "mod-dir-entry"));
     GtkWidget *bak_dir_e = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "bak-dir-entry"));
     GtkWidget *max_bak_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "max-bak-spin"));
     GtkWidget *cf_e = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "cf-entry"));
     GtkWidget *auto_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "auto-scan-switch"));
     GtkWidget *backup_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "backup-switch"));
 
-    if (mod_dir_e) snprintf(config->mod_dir, sizeof(config->mod_dir), "%s",
-        gtk_editable_get_text(GTK_EDITABLE(mod_dir_e)));
     if (bak_dir_e) snprintf(config->backup_dir, sizeof(config->backup_dir), "%s",
         gtk_editable_get_text(GTK_EDITABLE(bak_dir_e)));
     if (max_bak_s) config->max_backups = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(max_bak_s));
@@ -119,19 +174,12 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     gtk_widget_set_margin_bottom(content_box, 12);
     gtk_window_set_child(GTK_WINDOW(dialog), content_box);
 
-    /* 创建输入控件 */
-    GtkWidget *mod_dir_e = gtk_entry_new();
-    gtk_editable_set_text(GTK_EDITABLE(mod_dir_e), config->mod_dir);
-    gtk_widget_set_hexpand(mod_dir_e, TRUE);
-    gtk_widget_set_name(mod_dir_e, "settings-entry");
-    GtkWidget *r1 = add_labeled_row(content_box, "模组目录:", mod_dir_e);
-
+    /* 创建输入控件（模组目录在工具栏上选择，这里只保留其余设置） */
     GtkWidget *bak_dir_e = gtk_entry_new();
     gtk_editable_set_text(GTK_EDITABLE(bak_dir_e), config->backup_dir);
     gtk_widget_set_hexpand(bak_dir_e, TRUE);
     gtk_widget_set_name(bak_dir_e, "settings-entry");
-    GtkWidget *r2 = add_labeled_row(content_box, "备份目录:", bak_dir_e);
-
+    GtkWidget *r2 = add_labeled_row(content_box, "备份目录:", make_dir_picker(bak_dir_e));
     GtkWidget *max_bak_s = gtk_spin_button_new_with_range(0, 99, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(max_bak_s), config->max_backups);
     gtk_widget_set_name(max_bak_s, "settings-spin");
@@ -156,7 +204,6 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
 
     /* 存储控件 */
     g_object_set_data(G_OBJECT(dialog), "config", config);
-    g_object_set_data(G_OBJECT(dialog), "mod-dir-entry", mod_dir_e);
     g_object_set_data(G_OBJECT(dialog), "bak-dir-entry", bak_dir_e);
     g_object_set_data(G_OBJECT(dialog), "max-bak-spin", max_bak_s);
     g_object_set_data(G_OBJECT(dialog), "cf-entry", cf_e);

@@ -56,6 +56,7 @@ set(HEADERS
 add_executable(${PROJECT_NAME}
     ${SOURCES}
     ${HEADERS}
+    logo.rc
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
