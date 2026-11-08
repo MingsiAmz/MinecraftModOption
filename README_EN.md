@@ -32,6 +32,19 @@ A native Windows GUI for managing Minecraft mods, written in **C11 + GTK4**. Sca
 
 ---
 
+## Download and run
+
+Grab one of the assets from [Releases](../../releases):
+
+| Package | Notes |
+|---|---|
+| `MinecraftModOption-vX.Y.Z-win64-portable.zip` | **Recommended.** Unzip anywhere and double-click `MinecraftModOption.exe` — every GTK4 runtime DLL is bundled, nothing to install |
+| `MinecraftModOption.exe` | Single file, small, but needs a GTK4 runtime on `PATH` (add MSYS2's `ucrt64\bin`, otherwise it reports `libcurl-4.dll` / `libgtk-4-1.dll` as missing) |
+
+The portable folder contains a pile of `lib*.dll` files next to the executable. They are GTK4's runtime dependencies — do not delete them, and do not copy the exe out on its own.
+
+---
+
 ## Build
 
 Requires **MSYS2 (UCRT64 or MinGW64)** with GTK4 and friends:
@@ -50,6 +63,10 @@ ninja
 ```
 
 The result is `build/MinecraftModOption.exe`. Add MSYS2's `ucrt64\bin` to `PATH` before running it — the GTK4 DLLs must be discoverable.
+
+### Building the portable package
+
+Walk the executable's imports recursively (`objdump -p <file>` and its `DLL Name:` lines), copy every MSYS2-provided dependency next to the exe, and you have an install-free folder: GTK4 resolves its runtime from the executable's own directory.
 
 The window icon is declared in `logo.rc`, which points at `assets/icon.ico` and is compiled into the executable by windres.
 

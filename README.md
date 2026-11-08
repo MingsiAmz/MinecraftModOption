@@ -32,6 +32,19 @@
 
 ---
 
+## 下载与运行
+
+从 [Releases](../../releases) 下载：
+
+| 包 | 说明 |
+|---|---|
+| `MinecraftModOption-vX.Y.Z-win64-portable.zip` | **推荐**。解压到任意目录，双击 `MinecraftModOption.exe` 即可，已附带 GTK4 等全部运行时 DLL，无需安装任何东西 |
+| `MinecraftModOption.exe` | 单文件，体积小，但需要自行提供 GTK4 运行时（把 MSYS2 的 `ucrt64\bin` 加入 `PATH`，否则会提示找不到 `libcurl-4.dll`、`libgtk-4-1.dll` 等） |
+
+便携版解压后文件夹里除了 exe 还有一批 `lib*.dll`，它们是 GTK4 的运行时依赖，**不要删除**，也不要单独把 exe 拷走。
+
+---
+
 ## 构建
 
 需要 **MSYS2 (UCRT64 或 MinGW64)**，并安装 GTK4 与依赖：
@@ -51,7 +64,14 @@ ninja
 
 产物为 `build/MinecraftModOption.exe`。把 MSYS2 的 `ucrt64\bin` 加入 `PATH` 后即可直接运行（GTK4 的 DLL 必须能被找到）。
 
-图标资源由 `logo.rc` 引用 `assets/icon.ico`，由 windres 在构建时编译进可执行文件。
+### 打包便携版
+
+```bash
+# 递归收集 exe 依赖的全部 MSYS2 DLL，与 exe 放在同一目录
+# 依赖用 objdump -p <文件> 读取 "DLL Name:" 得到，逐层展开
+```
+
+把 `MinecraftModOption.exe` 和收集到的 70 余个 DLL（`libgtk-4-1.dll`、`libcurl-4.dll`、`libcjson-1.dll`、`libglib-2.0-0.dll` …）放在同一目录即为免安装版本，GTK4 会自动从 exe 所在目录加载。图标资源由 `logo.rc` 引用 `assets/icon.ico`，由 windres 在构建时编译进可执行文件。
 
 ---
 
