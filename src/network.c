@@ -3,6 +3,44 @@
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+/* 便携版的 CA 证书：libcurl 的默认 CA 路径编进的是 MSYS2 安装前缀，
+ * 免安装包是平铺布局，那个路径不存在，HTTPS 请求会以
+ * "Problem with the SSL CA cert (path? access rights?)" 全部失败
+ * （表现为模组全部「未匹配」、检测不到更新）。这里优先用 exe 同级的
+ * cacert.pem；找不到时保持 libcurl 原有行为。 */
+#ifdef _WIN32
+static const char *portable_ca_bundle(void)
+{
+    static char path[MAX_PATH];
+    static int resolved = 0;
+
+    if (!resolved) {
+        resolved = 1;
+
+        char exe[MAX_PATH];
+        DWORD len = GetModuleFileNameA(NULL, exe, sizeof(exe));
+        if (len > 0 && len < sizeof(exe)) {
+            char *sep = strrchr(exe, '\\');
+            if (sep) {
+                *sep = '\0';
+                int n = snprintf(path, sizeof(path), "%s\\cacert.pem", exe);
+                if (n <= 0 || (size_t)n >= sizeof(path) ||
+                    GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+                    path[0] = '\0';
+                }
+            }
+        }
+    }
+
+    return path[0] ? path : NULL;
+}
+#else
+static const char *portable_ca_bundle(void) { return NULL; }
+#endif
 
 // ─── libcurl 写回调 ───
 static size_t write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -70,6 +108,10 @@ static int perform_request(const char *url, const char **headers,
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
 
+    const char *ca_bundle = portable_ca_bundle();
+    if (ca_bundle)
+        curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle);
+
     if (post_body) {
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_body);
@@ -86,6 +128,9 @@ static int perform_request(const char *url, const char **headers,
     }
 
     CURLcode res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK)
+        fprintf(stderr, "[network] %s 失败: %s\n", url, curl_easy_strerror(res));
 
     if (http_code) {
         long code = 0;
@@ -133,6 +178,10 @@ int network_download(const char *url, const char *filepath)
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progress_callback);
+
+    const char *ca_bundle = portable_ca_bundle();
+    if (ca_bundle)
+        curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle);
 
     CURLcode res = curl_easy_perform(curl);
 
