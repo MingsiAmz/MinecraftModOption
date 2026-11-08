@@ -11,14 +11,29 @@
 #include <windows.h>
 #include <cjson/cJSON.h>
 
+// ─── 递归创建目录（不弹黑框，system("mkdir") 会为每个模组闪一次控制台） ───
+static void ensure_directory(const char *path)
+{
+    char tmp[2048];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+
+    for (char *p = tmp + 3; *p; p++) {
+        if (*p == '\\' || *p == '/') {
+            char saved = *p;
+            *p = '\0';
+            CreateDirectoryA(tmp, NULL);
+            *p = saved;
+        }
+    }
+    CreateDirectoryA(tmp, NULL);
+}
+
 // ─── 备份一个模组文件 ───
 static int backup_mod_file(const char *file_path, const char *backup_dir,
                             const char *mod_name, const char *version)
 {
     // 确保备份目录存在
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "if not exist \"%s\" mkdir \"%s\"", backup_dir, backup_dir);
-    system(cmd);
+    ensure_directory(backup_dir);
 
     // 构造备份文件名：模组名_版本_时间戳.jar
     char backup_name[1024];
@@ -112,13 +127,23 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
     // 构造下载 URL（根据来源平台）
     char download_url[2048] = "";
 
-    if (mod->source == MOD_SOURCE_MODRINTH) {
-        // Modrinth 下载：需先查询具体版本文件
+    // 扫描阶段已经通过 /version_files 拿过版本文件信息，优先直接用
+    if (mod->source == MOD_SOURCE_MODRINTH && mod->download_url[0] != '\0') {
+        snprintf(download_url, sizeof(download_url), "%s", mod->download_url);
+    }
+
+    if (download_url[0] == '\0' && mod->source == MOD_SOURCE_MODRINTH) {
+        // 退回按版本 ID 查具体文件
         char api_url[2048];
-        snprintf(api_url, sizeof(api_url),
-                 "%s/project/%s/version?loaders=[\"%s\"]",
-                 MODRINTH_API_BASE, mod->mod_id,
-                 mod->loader[0] ? mod->loader : "fabric");
+        if (mod->latest_version_id[0] != '\0') {
+            snprintf(api_url, sizeof(api_url), "%s/version/%s",
+                     MODRINTH_API_BASE, mod->latest_version_id);
+        } else {
+            snprintf(api_url, sizeof(api_url),
+                     "%s/project/%s/version?loaders=[\"%s\"]",
+                     MODRINTH_API_BASE, mod->mod_id,
+                     mod->loader[0] ? mod->loader : "fabric");
+        }
 
         MemoryBuffer resp = {0};
         const char *headers[] = {
@@ -129,17 +154,17 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
 
         if (network_get(api_url, headers, &resp) == 0) {
             cJSON *versions = cJSON_Parse(resp.data);
-            if (versions && cJSON_IsArray(versions)) {
-                cJSON *v = cJSON_GetArrayItem(versions, 0);
-                if (v) {
-                    cJSON *files = cJSON_GetObjectItem(v, "files");
-                    if (files && cJSON_IsArray(files)) {
-                        cJSON *file = cJSON_GetArrayItem(files, 0);
-                        if (file) {
-                            cJSON *url_val = cJSON_GetObjectItem(file, "url");
-                            if (url_val && cJSON_IsString(url_val))
-                                snprintf(download_url, sizeof(download_url), "%s", url_val->valuestring);
-                        }
+            cJSON *v = versions;
+            if (versions && cJSON_IsArray(versions))
+                v = cJSON_GetArrayItem(versions, 0);
+            if (v) {
+                cJSON *files = cJSON_GetObjectItem(v, "files");
+                if (files && cJSON_IsArray(files)) {
+                    cJSON *file = cJSON_GetArrayItem(files, 0);
+                    if (file) {
+                        cJSON *url_val = cJSON_GetObjectItem(file, "url");
+                        if (url_val && cJSON_IsString(url_val))
+                            snprintf(download_url, sizeof(download_url), "%s", url_val->valuestring);
                     }
                 }
             }

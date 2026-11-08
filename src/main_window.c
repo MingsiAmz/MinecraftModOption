@@ -329,6 +329,29 @@ static void on_select_toggle_clicked(GtkButton *btn, gpointer userdata)
 /* ═══════════════ Update ═══════════════ */
 typedef struct { int *indices; int count; } UpdateData;
 
+/* 进度条更新只能回主线程做；set_progress() 有两个参数，不能直接当
+ * GSourceFunc 用（那样第二个参数会是野指针，进而崩溃）。 */
+typedef struct {
+    double fraction;
+    char text[64];
+} ProgressUpdate;
+
+static gboolean update_progress_idle(gpointer userdata)
+{
+    ProgressUpdate *p = (ProgressUpdate *)userdata;
+    set_progress(p->fraction, p->text[0] ? p->text : NULL);
+    g_free(p);
+    return G_SOURCE_REMOVE;
+}
+
+static void update_progress_async(double fraction, const char *text)
+{
+    ProgressUpdate *p = g_new(ProgressUpdate, 1);
+    p->fraction = fraction;
+    snprintf(p->text, sizeof(p->text), "%s", text ? text : "");
+    g_idle_add(update_progress_idle, p);
+}
+
 static gboolean update_show_result_cb(gpointer userdata)
 {
     int *vals = (int *)userdata;
@@ -361,10 +384,7 @@ static gpointer update_thread_func(gpointer userdata)
     for (int i = 0; i < data->count; i++) {
         snprintf(progress_text, sizeof(progress_text),
             "更新: %d/%d", i+1, data->count);
-        g_idle_add((GSourceFunc)set_progress,
-            GSIZE_TO_POINTER((guint64)((double)(i+1)/data->count * 1000)));
-        // 注意：set_progress 的 text 参数会被 GSIZE_TO_POINTER 错误传递
-        // 实际用全局变量，这里简化
+        update_progress_async((double)(i+1) / data->count, progress_text);
 
         ModInfo *mod = mod_list_get(data->indices[i]);
         if (!mod) { failed++; continue; }
