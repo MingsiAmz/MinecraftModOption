@@ -24,8 +24,11 @@ typedef struct {
     int status;                 // 状态
     char file_name[256];        // 文件名
     char file_path[1024];       // 完整路径
+    char sha1[48];              // 文件 SHA1（Modrinth 用其识别模组）
     long file_size;             // 文件大小（字节）
     char project_url[512];      // 项目主页
+    char latest_version_id[40]; // 最新版本 ID（用于精确下载）
+    char download_url[1024];    // 最新版本文件下载地址
     char description[1024];     // 模组描述
     int backup_count;           // 备份数量
 } ModInfo;

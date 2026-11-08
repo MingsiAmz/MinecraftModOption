@@ -13,4 +13,10 @@ GtkWidget *main_window_create(void);
  */
 void main_window_update_status(void);
 
+/**
+ * 启动一次模组扫描（解析 jar + SHA1 识别 + 更新检测）
+ * 已有扫描在进行时直接返回。
+ */
+void main_window_start_scan(void);
+
 #endif /* MAIN_WINDOW_H */

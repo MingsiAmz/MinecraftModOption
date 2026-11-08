@@ -22,4 +22,29 @@ int modrinth_query_version(ModInfo *mod, const char *mc_version, const char *loa
  */
 int modrinth_search_slug(const char *slug, ModInfo *mod);
 
+/**
+ * 进度回调：done 已完成数量，total 总数，stage 当前阶段描述。
+ */
+typedef void (*ModrinthProgressFunc)(int done, int total, const char *stage,
+                                     gpointer userdata);
+
+/**
+ * 用本地文件的 SHA1 批量识别模组并检测更新（Modrinth 批量接口）
+ *
+ * 内部流程：
+ *   1. POST /version_files         —— SHA1 → 版本信息（识别模组）
+ *   2. POST /version_files/update  —— SHA1 + 加载器 + MC 版本 → 最新版本
+ *   3. GET  /projects?ids=[...]    —— 批量获取项目名称
+ *
+ * 结果直接写回 ModInfo（mod_id/local_version/latest_version/latest_version_id/
+ * download_url/name/project_url/source/status）。需要 mod->sha1 已填充。
+ *
+ * @param mods      ModInfo* 数组
+ * @param progress  进度回调，可为 NULL
+ * @param userdata  传给进度回调的上下文
+ * @return 成功识别的模组数量
+ */
+int modrinth_resolve_all(GPtrArray *mods, ModrinthProgressFunc progress,
+                         gpointer userdata);
+
 #endif /* MODRINTH_H */

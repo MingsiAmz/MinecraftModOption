@@ -49,8 +49,10 @@ void network_cleanup(void)
     curl_global_cleanup();
 }
 
-// ─── HTTP GET ───
-int network_get(const char *url, const char **headers, MemoryBuffer *output)
+// ─── 通用请求执行（post_body 为 NULL 时走 GET） ───
+static int perform_request(const char *url, const char **headers,
+                           const char *post_body, MemoryBuffer *output,
+                           long *http_code)
 {
     CURL *curl = curl_easy_init();
     if (!curl) return -1;
@@ -66,8 +68,13 @@ int network_get(const char *url, const char **headers, MemoryBuffer *output)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progress_callback);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+
+    if (post_body) {
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_body);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(post_body));
+    }
 
     // 设置 HTTP 头
     struct curl_slist *chunk = NULL;
@@ -80,10 +87,29 @@ int network_get(const char *url, const char **headers, MemoryBuffer *output)
 
     CURLcode res = curl_easy_perform(curl);
 
+    if (http_code) {
+        long code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+        *http_code = code;
+    }
+
     if (chunk) curl_slist_free_all(chunk);
     curl_easy_cleanup(curl);
 
     return (res == CURLE_OK) ? 0 : -1;
+}
+
+// ─── HTTP GET ───
+int network_get(const char *url, const char **headers, MemoryBuffer *output)
+{
+    return perform_request(url, headers, NULL, output, NULL);
+}
+
+// ─── HTTP POST JSON ───
+int network_post_json(const char *url, const char **headers, const char *json,
+                      MemoryBuffer *output, long *http_code)
+{
+    return perform_request(url, headers, json, output, http_code);
 }
 
 // ─── 下载文件 ───

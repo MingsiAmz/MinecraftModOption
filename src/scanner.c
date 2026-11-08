@@ -60,10 +60,13 @@ static int read_file_from_jar(const char *jar_path, const char *internal_path,
 
     int result = -1;
 
-    // 从文件末尾查找 End of Central Directory 记录
-    // 用于找到 Central Directory 的偏移量
+    // 从文件末尾向前查找 End of Central Directory 记录
+    // 用于找到 Central Directory 的偏移量。没有 zip 注释时 EOCD 恰好位于
+    // fsize - 22 处，因此必须包含该位置；向前查找还可能命中数据区里的伪签名。
     const unsigned char *end_hdr = NULL;
-    for (DWORD off = (fsize < 65557 ? 0 : fsize - 65557); off < fsize - 22; off++) {
+    DWORD eocd_min = (fsize < 65557) ? 0 : (fsize - 65557);
+    DWORD eocd_max = fsize - 22;
+    for (DWORD off = eocd_max + 1; off-- > eocd_min; ) {
         if (*(unsigned int *)(data + off) == ZIP_END_CENTRAL_DIR_SIG) {
             end_hdr = data + off;
             break;

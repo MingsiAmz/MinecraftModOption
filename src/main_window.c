@@ -8,7 +8,7 @@
 #include "curseforge.h"
 #include "updater.h"
 #include "deleter.h"
-#include <process.h>  /* for _beginthreadex */
+#include "hash.h"
 #include "rollback.h"
 #include "cache.h"
 #include <string.h>
@@ -54,10 +54,7 @@ void main_window_update_status(void)
     int updates = mod_list_update_count();
 
     GString *s = g_string_sized_new(256);
-    g_string_append_printf(s,
-        "\xe6\xa8\xa1\xe7\xbb\x84: %d \xe4\xb8\xaa  \xe2\x94\x82  "
-        "\xe2\xac\x86 \xe5\x8f\xaf\xe6\x9b\xb4\xe6\x96\xb0: %d \xe4\xb8\xaa",
-        total, updates);
+    g_string_append_printf(s, "模组: %d 个  │  可更新: %d 个", total, updates);
 
     // 如果目录有效，显示目录名（缩写）
     if (state->config.mod_dir[0]) {
@@ -65,7 +62,7 @@ void main_window_update_status(void)
         shorten_dir_name(state->config.mod_dir, dir_str, sizeof(dir_str));
 
         GString *tmp = g_string_new(dir_str);
-        g_string_append(tmp, "  \xe2\x94\x82  ");
+        g_string_append(tmp, "  │  ");
         g_string_append(tmp, s->str);
         g_string_free(s, TRUE);
         s = tmp;
@@ -121,25 +118,6 @@ typedef struct {
     char mod_dir[1024];
 } ScanData;
 
-typedef struct {
-    int current;
-    int total;
-} VersionProgress;
-
-/* thread-safe counter for concurrent version queries */
-typedef struct {
-    volatile LONG completed;
-    int total;
-    CRITICAL_SECTION cs;
-} QueryCounter;
-
-/* per-mod query task data */
-typedef struct {
-    ModInfo *mod;
-    char mc_ver[32];
-    char curse_api[256];
-} QueryTask;
-
 /* Idle: show list immediately after scan */
 static gboolean scan_finished_idle(gpointer userdata)
 {
@@ -157,67 +135,34 @@ static gboolean show_progress_idle(gpointer userdata)
     return G_SOURCE_REMOVE;
 }
 
-/* Idle: update version check progress */
-static gboolean version_progress_idle(gpointer userdata)
+/* 版本检测进度（工作线程 → 主线程） */
+typedef struct {
+    int done;
+    int total;
+    char stage[64];
+} ResolveProgress;
+
+static gboolean resolve_progress_idle(gpointer userdata)
 {
-    VersionProgress *p = (VersionProgress *)userdata;
-    double frac = (p->total > 0) ? (double)p->current / p->total : 0.0;
-    char text[128];
-    snprintf(text, sizeof(text), "正在查询版本... %d/%d", p->current, p->total);
+    ResolveProgress *p = (ResolveProgress *)userdata;
+    double frac = (p->total > 0) ? (double)p->done / p->total : 0.0;
+
+    char text[160];
+    snprintf(text, sizeof(text), "%s %d/%d", p->stage, p->done, p->total);
     set_progress(frac, text);
+
     g_free(p);
     return G_SOURCE_REMOVE;
 }
 
-/* Idle: update concurrent query progress */
-static gboolean query_progress_idle(gpointer userdata)
+static void on_resolve_progress(int done, int total, const char *stage, gpointer userdata)
 {
-    QueryCounter *qc = (QueryCounter *)userdata;
-    int done = (int)InterlockedExchangeAdd(&qc->completed, 0);
-    double frac = (qc->total > 0) ? (double)done / qc->total : 0.0;
-    char text[128];
-    snprintf(text, sizeof(text), "正在查询版本... %d/%d", done, qc->total);
-    set_progress(frac, text);
-    /* don't free qc here, reused until all done */
-    return G_SOURCE_REMOVE;
-}
-
-/* Idle: check if all concurrent queries are done */
-static gboolean query_done_check_idle(gpointer userdata)
-{
-    QueryCounter *qc = (QueryCounter *)userdata;
-    int done = (int)InterlockedExchangeAdd(&qc->completed, 0);
-    if (done < qc->total)
-        return G_SOURCE_CONTINUE;  /* keep checking */
-
-    /* all done */
-    DeleteCriticalSection(&qc->cs);
-
-    GPtrArray *mods = mod_list_get_all();
-    cache_save(mods);
-
-    g_free(qc);
-
-    version_check_finished_idle(NULL);
-    return G_SOURCE_REMOVE;
-}
-
-/* thread function: query one mod version */
-static unsigned __stdcall query_one_mod_thread(void *arg)
-{
-    QueryTask *task = (QueryTask *)arg;
-    modrinth_query_version(task->mod,
-        task->mc_ver[0] ? task->mc_ver : NULL,
-        task->mod->loader[0] ? task->mod->loader : NULL);
-
-    if (task->curse_api[0]) {
-        curseforge_query_version(task->mod, task->curse_api,
-            task->mc_ver[0] ? task->mc_ver : NULL);
-    }
-
-    g_free(task);
-    _endthreadex(0);
-    return 0;
+    (void)userdata;
+    ResolveProgress *p = g_new0(ResolveProgress, 1);
+    p->done = done;
+    p->total = total;
+    snprintf(p->stage, sizeof(p->stage), "%s", stage ? stage : "");
+    g_idle_add(resolve_progress_idle, p);
 }
 
 /* Idle: version check done, unlock scan button */
@@ -232,26 +177,6 @@ static gboolean version_check_finished_idle(gpointer userdata)
     state->is_scanning = FALSE;
 
     return G_SOURCE_REMOVE;
-}
-
-/* Count .jar files in directory (reference only) */
-static int count_jars(const char *dir)
-{
-    int count = 0;
-    WIN32_FIND_DATAA ffd;
-    char pattern[1030];
-    snprintf(pattern, sizeof(pattern), "%s\\*", dir);
-    HANDLE hFind = FindFirstFileA(pattern, &ffd);
-    if (hFind == INVALID_HANDLE_VALUE) return 0;
-    do {
-        if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            size_t len = strlen(ffd.cFileName);
-            if (len >= 4 && (strcasecmp(ffd.cFileName + len - 4, ".jar") == 0))
-                count++;
-        }
-    } while (FindNextFileA(hFind, &ffd) != 0);
-    FindClose(hFind);
-    return count;
 }
 
 // ─── 写入调试日志（绝对路径，确保可写入） ───
@@ -273,16 +198,62 @@ static void write_debug_log(const char *fname, const char *fmt, ...)
     fclose(f);
 }
 
+/* ═══════════════ Scan ═══════════════ */
+
+static bool is_jar_name(const char *file_name)
+{
+    size_t len = strlen(file_name);
+    return len > 4 && strcasecmp(file_name + len - 4, ".jar") == 0;
+}
+
+/* 由一个 jar 文件构建 ModInfo：文件名兜底 + jar 元数据 + SHA1 */
+static void build_mod_info(const char *mod_dir, const char *file_name,
+                           long file_size, ModInfo *info)
+{
+    memset(info, 0, sizeof(*info));
+
+    snprintf(info->file_name, sizeof(info->file_name), "%s", file_name);
+    snprintf(info->file_path, sizeof(info->file_path), "%s\\%s", mod_dir, file_name);
+    info->file_size = file_size;
+    info->status = MOD_STATUS_UNKNOWN;
+
+    /* 先用文件名去后缀作为显示名 */
+    char name_only[256];
+    snprintf(name_only, sizeof(name_only), "%s", file_name);
+    char *dot = strrchr(name_only, '.');
+    if (dot) *dot = '\0';
+    snprintf(info->name, sizeof(info->name), "%s", name_only);
+    snprintf(info->mod_id, sizeof(info->mod_id), "%s", name_only);
+
+    /* jar 内元数据更准确，解析失败不影响后续 SHA1 识别 */
+    ModInfo meta;
+    memset(&meta, 0, sizeof(meta));
+    if (scanner_parse_jar(info->file_path, &meta) == 0) {
+        if (meta.name[0])
+            snprintf(info->name, sizeof(info->name), "%s", meta.name);
+        if (meta.local_version[0])
+            snprintf(info->local_version, sizeof(info->local_version),
+                     "%s", meta.local_version);
+        if (meta.mc_version[0])
+            snprintf(info->mc_version, sizeof(info->mc_version),
+                     "%s", meta.mc_version);
+        if (meta.loader[0])
+            snprintf(info->loader, sizeof(info->loader), "%s", meta.loader);
+    }
+
+    /* SHA1 是 Modrinth 识别模组的唯一可靠依据 */
+    if (hash_sha1_file(info->file_path, info->sha1) != 0)
+        info->sha1[0] = '\0';
+}
+
 static gpointer scan_thread_func(gpointer userdata)
 {
     ScanData *data = (ScanData *)userdata;
 
     write_debug_log("scan_log.txt", "=== scan_thread STARTED ===\nmod_dir=%s\n", data->mod_dir);
 
-    // 第一步：列举目录中所有 .jar 文件（只用文件名，不解析 jar 内部）
     mod_list_clear();
 
-    /* List .jars via FindFirstFile (fast, no jar parsing) */
     int jar_count = 0;
     char pattern[1030];
     snprintf(pattern, sizeof(pattern), "%s\\*.jar", data->mod_dir);
@@ -292,130 +263,50 @@ static gpointer scan_thread_func(gpointer userdata)
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            if (!is_jar_name(ffd.cFileName)) continue;
 
-            char full_path[2048];
-            snprintf(full_path, sizeof(full_path), "%s\\%s", data->mod_dir, ffd.cFileName);
-
-            // 创建模组信息（只用文件名，不解析 jar）
             ModInfo info;
-            memset(&info, 0, sizeof(info));
-            snprintf(info.file_name, sizeof(info.file_name), "%s", ffd.cFileName);
-            snprintf(info.file_path, sizeof(info.file_path), "%s", full_path);
-            info.file_size = (long)(ffd.nFileSizeLow);
-            info.status = MOD_STATUS_UNKNOWN;
-
-            // 文件名去掉 .jar 作为名称
-            char name_only[256];
-            snprintf(name_only, sizeof(name_only), "%s", ffd.cFileName);
-            char *dot = strrchr(name_only, '.');
-            if (dot && strcasecmp(dot, ".jar") == 0) *dot = '\0';
-            snprintf(info.name, sizeof(info.name), "%s", name_only);
-            snprintf(info.mod_id, sizeof(info.mod_id), "%s", name_only);
-
+            build_mod_info(data->mod_dir, ffd.cFileName,
+                           (long)ffd.nFileSizeLow, &info);
             mod_list_add(&info);
             jar_count++;
         } while (FindNextFileA(hFind, &ffd) != 0);
         FindClose(hFind);
     }
 
-    write_debug_log("scan_log.txt", "Total jars found: %d\n", jar_count);
-    write_debug_log("scan_log.txt", "mod_list_count: %d\n", mod_list_count());
+    write_debug_log("scan_log.txt", "jars found: %d\n", jar_count);
 
-    int total = mod_list_count();
-
-    // ─── 立即刷新 UI 显示列表（不等版本查询） ───
+    /* 先刷新列表，让用户立刻看到文件，随后回填识别结果 */
     g_idle_add(scan_finished_idle, NULL);
 
-    // ─── 并发后台版本查询（多线程加速） ───
-    if (total > 0) {
-        AppState *state = app_get_state();
+    if (jar_count > 0) {
         g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, show_progress_idle,
-            g_strdup("正在查询版本..."), NULL);
+                        g_strdup("正在识别模组..."), NULL);
 
-        QueryCounter *qc = g_new(QueryCounter, 1);
-        qc->completed = 0;
-        qc->total = total;
-        InitializeCriticalSection(&qc->cs);
+        GPtrArray *mods = mod_list_get_all();
+        int resolved = modrinth_resolve_all(mods, on_resolve_progress, NULL);
+        cache_save(mods);
 
-        int max_threads = min(total, 8);
-        if (max_threads < 1) max_threads = 1;
-        HANDLE *threads = g_new(HANDLE, max_threads);
-        int thread_count = 0;
-        int next_i = 0;
-
-        while (next_i < total || thread_count > 0) {
-            /* spawn threads up to max */
-            while (thread_count < max_threads && next_i < total) {
-                ModInfo *mod = mod_list_get(next_i);
-                if (!mod) { next_i++; continue; }
-
-                QueryTask *task = g_new(QueryTask, 1);
-                task->mod = mod;
-                task->mc_ver[0] = '\0';
-                task->curse_api[0] = '\0';
-
-                if (mod->mc_version[0]) {
-                    const char *p = strchr(mod->mc_version, '.');
-                    if (p) {
-                        p = strchr(p+1, '.');
-                        if (p) {
-                            size_t n = p - mod->mc_version;
-                            if (n < sizeof(task->mc_ver))
-                                strncpy(task->mc_ver, mod->mc_version, n);
-                        }
-                    }
-                    if (!task->mc_ver[0])
-                        snprintf(task->mc_ver, sizeof(task->mc_ver), "%s", mod->mc_version);
-                }
-
-                if (state->config.curseforge_api_key[0])
-                    snprintf(task->curse_api, sizeof(task->curse_api), "%s",
-                        state->config.curseforge_api_key);
-
-                threads[thread_count] = (HANDLE)_beginthreadex(NULL, 0,
-                    query_one_mod_thread, task, 0, NULL);
-                thread_count++;
-                next_i++;
-            }
-
-            /* wait for any thread to finish (100ms poll) */
-            DWORD wait = WaitForMultipleObjects(thread_count, threads, FALSE, 100);
-
-            /* clean up finished threads and count progress */
-            int new_count = 0;
-            for (int i = 0; i < thread_count; i++) {
-                DWORD ret = WaitForSingleObject(threads[i], 0);
-                if (ret == WAIT_OBJECT_0) {
-                    CloseHandle(threads[i]);
-                    InterlockedIncrement(&qc->completed);
-                } else {
-                    threads[new_count++] = threads[i];
-                }
-            }
-            thread_count = new_count;
-
-            /* update progress bar */
-            g_idle_add(query_progress_idle, qc);
-        }
-
-        g_free(threads);
-
-        /* wait for any remaining progress update then save cache */
-        g_idle_add(query_done_check_idle, qc);
-    } else {
-        /* no mods, just unlock */
-        g_idle_add(version_check_finished_idle, NULL);
+        write_debug_log("scan_log.txt", "modrinth identified: %d/%d\n",
+                        resolved, jar_count);
     }
+
+    g_idle_add(version_check_finished_idle, NULL);
 
     g_free(data);
     return NULL;
 }
 
 /* 启动一次扫描（已有扫描在进行时直接返回） */
-static void main_window_start_scan(AppState *state)
+void main_window_start_scan(void)
 {
+    AppState *state = app_get_state();
+
     if (state->is_scanning) return;
+    if (state->config.mod_dir[0] == '\0') return;
+
     state->is_scanning = TRUE;
+
     ScanData *d = g_new(ScanData, 1);
     snprintf(d->mod_dir, sizeof(d->mod_dir), "%s", state->config.mod_dir);
     g_thread_new("scan", scan_thread_func, d);
@@ -424,7 +315,7 @@ static void main_window_start_scan(AppState *state)
 static void on_scan_clicked(GtkButton *btn, gpointer userdata)
 {
     (void)btn; (void)userdata;
-    main_window_start_scan(app_get_state());
+    main_window_start_scan();
 }
 
 /* ═══════════════ Select Toggle ═══════════════ */
@@ -469,7 +360,7 @@ static gpointer update_thread_func(gpointer userdata)
 
     for (int i = 0; i < data->count; i++) {
         snprintf(progress_text, sizeof(progress_text),
-            "\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0: %d/%d", i+1, data->count);
+            "更新: %d/%d", i+1, data->count);
         g_idle_add((GSourceFunc)set_progress,
             GSIZE_TO_POINTER((guint64)((double)(i+1)/data->count * 1000)));
         // 注意：set_progress 的 text 参数会被 GSIZE_TO_POINTER 错误传递
@@ -505,7 +396,7 @@ static void on_update_sel_clicked(GtkButton *btn, gpointer userdata)
     if (!indices || count == 0) {
         g_free(indices);
         dialogs_show_confirm(GTK_WINDOW(window), "\xe6\x8f\x90\xe7\xa4\xba",
-            "\xe8\xaf\xb7\xe5\x85\x88\xe5\x8b\xbe\xe9\x80\x89\xe8\xa6\x81\xe6\x9b\xb4\xe6\x96\xb0\xe7\x9a\x84\xe6\xa8\xa1\xe7\xbb\x84\xe3\x80\x82\n\n\xe2\x8c\xa8 Ctrl+A \xe5\x85\xa8\xe9\x80\x89");
+            "请先勾选要更新的模组。\n\nCtrl+A 全选");
         return;
     }
 
@@ -518,7 +409,7 @@ static void on_update_sel_clicked(GtkButton *btn, gpointer userdata)
         { g_free(indices); return; }
 
     state->is_updating = TRUE;
-    show_progress("\xe2\xac\x86 \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9b\xb4\xe6\x96\xb0...");
+    show_progress("正在更新...");
     UpdateData *d = g_new(UpdateData, 1);
     d->indices = indices; d->count = count;
     g_thread_new("update", update_thread_func, d);
@@ -551,7 +442,7 @@ static void on_update_all_clicked(GtkButton *btn, gpointer userdata)
         { g_free(indices); return; }
 
     state->is_updating = TRUE;
-    show_progress("\xe2\xac\x86 \xe6\xad\xa3\xe5\x9c\xa8\xe6\x9b\xb4\xe6\x96\xb0\xe5\x85\xa8\xe9\x83\xa8...");
+    show_progress("正在更新全部...");
     UpdateData *d = g_new(UpdateData, 1);
     d->indices = indices; d->count = count;
     g_thread_new("update-all", update_thread_func, d);
@@ -705,7 +596,7 @@ static void on_dir_chosen(GObject *source, GAsyncResult *result, gpointer userda
                 mod_list_clear();
                 mod_list_view_refresh();
                 main_window_update_status();
-                main_window_start_scan(state);
+                main_window_start_scan();
             }
             g_free(path);
         }
@@ -753,14 +644,14 @@ GtkWidget *main_window_create(void)
     gtk_widget_set_margin_top(tb, 8);
     gtk_widget_set_margin_bottom(tb, 4);
 
-    GtkWidget *b_scan   = gtk_button_new_with_label("\xe6\x89\xab\xe6\x8f\x8f");
-    GtkWidget *b_upd_sel = gtk_button_new_with_label("\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0\xe9\x80\x89\xe4\xb8\xad");
-    GtkWidget *b_upd_all = gtk_button_new_with_label("\xe2\xac\x86 \xe6\x9b\xb4\xe6\x96\xb0\xe5\x85\xa8\xe9\x83\xa8");
-    GtkWidget *b_roll   = gtk_button_new_with_label("\xe2\x86\xa9 \xe5\x9b\x9e\xe6\xbb\x9a");
-    GtkWidget *b_del    = gtk_button_new_with_label("\xe5\x88\xa0\xe9\x99\xa4");
-    GtkWidget *b_sel_tog = gtk_button_new_with_label("\xe2\x98\x91 \xe5\x85\xa8\xe9\x80\x89");
+    GtkWidget *b_scan   = gtk_button_new_with_label("扫描");
+    GtkWidget *b_upd_sel = gtk_button_new_with_label("更新选中");
+    GtkWidget *b_upd_all = gtk_button_new_with_label("更新全部");
+    GtkWidget *b_roll   = gtk_button_new_with_label("回滚");
+    GtkWidget *b_del    = gtk_button_new_with_label("删除");
+    GtkWidget *b_sel_tog = gtk_button_new_with_label("全选");
     gtk_widget_set_name(b_sel_tog, "btn-sel-tog");
-    GtkWidget *b_set    = gtk_button_new_with_label("\xe8\xae\xbe\xe7\xbd\xae");
+    GtkWidget *b_set    = gtk_button_new_with_label("设置");
 
     // 为每个按钮Settings CSS name，以便精确覆盖样式
     gtk_widget_set_name(b_scan,    "btn-scan");
