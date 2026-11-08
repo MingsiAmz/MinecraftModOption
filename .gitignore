@@ -1,5 +1,6 @@
 build/
 build-release/
+build-debug/
 CMakeFiles/
 cmake-build-*/
 
