@@ -115,7 +115,6 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
     // 如果没有最新版本信息，无法更新
     if (mod->latest_version[0] == '\0')
         return -1;
-
     // 更新前备份
     if (backup_before) {
         if (backup_mod_file(mod->file_path, backup_dir, mod->name, mod->local_version) == 0) {
@@ -123,7 +122,6 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
             cleanup_old_backups(backup_dir, mod->name, max_backups);
         }
     }
-
     // 构造下载 URL（根据来源平台）
     char download_url[2048] = "";
 
@@ -186,12 +184,10 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
     // 下载到临时文件
     char tmp_file[1024];
     snprintf(tmp_file, sizeof(tmp_file), "%s.download.tmp", mod->file_path);
-
     if (network_download(download_url, tmp_file) != 0) {
         remove(tmp_file);
         return -1;
     }
-
     // SHA1 校验（可选，如果有校验值）
     // 替换原文件
     char old_file[1024];

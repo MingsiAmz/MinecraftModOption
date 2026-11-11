@@ -373,36 +373,84 @@ static gboolean update_finished_idle(gpointer userdata)
     return G_SOURCE_REMOVE;
 }
 
+/* 更新是多线程的：每个模组要下载几百 KB 到几 MB，串行更新时总耗时就是
+ * 各模组之和。这里用 N 个 worker 共享一个待办下标，谁空下来谁取下一个，
+ * 总耗时降到「最慢的那批」。mod_list 只读、每个 worker 只写自己的 ModInfo，
+ * 计数用互斥锁保护，进度照旧经 g_idle_add 回到主线程。 */
+#define UPDATE_WORKERS 4
+
+typedef struct {
+    UpdateData *data;
+    GMutex lock;
+    int next;
+    int success;
+    int failed;
+    int error_count;
+    char errors[10][512];
+} UpdateJob;
+
+static gpointer update_worker(gpointer userdata)
+{
+    UpdateJob *job = (UpdateJob *)userdata;
+    AppState *state = app_get_state();
+
+    for (;;) {
+        g_mutex_lock(&job->lock);
+        int slot = (job->next < job->data->count) ? job->next++ : -1;
+        g_mutex_unlock(&job->lock);
+
+        if (slot < 0) break;
+
+        ModInfo *mod = mod_list_get(job->data->indices[slot]);
+        int rc = mod ? updater_update_mod(mod, state->config.backup_dir,
+                        state->config.backup_before_update,
+                        state->config.max_backups) : -1;
+
+        g_mutex_lock(&job->lock);
+        if (rc == 0) {
+            job->success++;
+        } else {
+            job->failed++;
+            if (mod && job->error_count < 10)
+                snprintf(job->errors[job->error_count++], 512, "%s: 更新失败", mod->name);
+        }
+        int done = job->success + job->failed;
+        g_mutex_unlock(&job->lock);
+
+        char progress_text[64];
+        snprintf(progress_text, sizeof(progress_text), "更新: %d/%d", done, job->data->count);
+        update_progress_async((double)done / job->data->count, progress_text);
+    }
+    return NULL;
+}
+
 static gpointer update_thread_func(gpointer userdata)
 {
     UpdateData *data = (UpdateData *)userdata;
-    AppState *state = app_get_state();
-    int success = 0, failed = 0;
-    char errors[10][512]; int error_count = 0;
-    char progress_text[256];
 
-    for (int i = 0; i < data->count; i++) {
-        snprintf(progress_text, sizeof(progress_text),
-            "更新: %d/%d", i+1, data->count);
-        update_progress_async((double)(i+1) / data->count, progress_text);
+    UpdateJob *job = g_new0(UpdateJob, 1);
+    job->data = data;
+    g_mutex_init(&job->lock);
 
-        ModInfo *mod = mod_list_get(data->indices[i]);
-        if (!mod) { failed++; continue; }
-        if (updater_update_mod(mod, state->config.backup_dir,
-                state->config.backup_before_update,
-                state->config.max_backups) == 0) success++;
-        else {
-            failed++;
-            if (error_count < 10) snprintf(errors[error_count++], 512,
-                "%s: \xe6\x9b\xb4\xe6\x96\xb0\xe5\xa4\xb1\xe8\xb4\xa5", mod->name);
-        }
-    }
+    int workers = data->count < UPDATE_WORKERS ? data->count : UPDATE_WORKERS;
+    if (workers < 1) workers = 1;
+
+    GThread **threads = g_new(GThread *, workers);
+    for (int i = 0; i < workers; i++)
+        threads[i] = g_thread_new("update", update_worker, job);
+    for (int i = 0; i < workers; i++)
+        g_thread_join(threads[i]);
+    g_free(threads);
+
     cache_save(mod_list_get_all());
 
     int *vals = g_new(int, 2);
-    vals[0] = success; vals[1] = failed;
+    vals[0] = job->success; vals[1] = job->failed;
     g_idle_add((GSourceFunc)update_show_result_cb, vals);
     g_idle_add(update_finished_idle, data);
+
+    g_mutex_clear(&job->lock);
+    g_free(job);
     return NULL;
 }
 
