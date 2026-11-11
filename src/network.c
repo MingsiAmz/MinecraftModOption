@@ -173,8 +173,16 @@ int network_download(const char *url, const char *filepath)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_file_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, f);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "MinecraftModManager/1.0");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 120L);
+    /* 不能用 CURLOPT_TIMEOUT 限制总时长：整合包的模组动辄二三十 MB，
+     * 按百来 KB/s 算要几分钟，设总超时会把正常下载判成失败（表现就是
+     * 「有时更新失败」）。这里只限制连接时间，并用低速阈值兜底：
+     * 连续 60 秒低于 1 KB/s 才认为连接已经死了。 */
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    /* HTTP 404 之类不能当成功：否则错误页面会被当成 jar 写进模组目录 */
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progress_callback);
