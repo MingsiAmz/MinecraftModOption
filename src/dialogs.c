@@ -141,6 +141,7 @@ static void on_settings_save(GtkButton *btn, GtkWindow *dialog)
 
     GtkWidget *bak_dir_e = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "bak-dir-entry"));
     GtkWidget *max_bak_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "max-bak-spin"));
+    GtkWidget *seg_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "segments-spin"));
     GtkWidget *cf_e = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "cf-entry"));
     GtkWidget *auto_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "auto-scan-switch"));
     GtkWidget *backup_s = GTK_WIDGET(g_object_get_data(G_OBJECT(dialog), "backup-switch"));
@@ -148,6 +149,12 @@ static void on_settings_save(GtkButton *btn, GtkWindow *dialog)
     if (bak_dir_e) snprintf(config->backup_dir, sizeof(config->backup_dir), "%s",
         gtk_editable_get_text(GTK_EDITABLE(bak_dir_e)));
     if (max_bak_s) config->max_backups = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(max_bak_s));
+    if (seg_s) {
+        int n = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(seg_s));
+        if (n < DOWNLOAD_SEGMENTS_MIN) n = DOWNLOAD_SEGMENTS_MIN;
+        if (n > DOWNLOAD_SEGMENTS_MAX) n = DOWNLOAD_SEGMENTS_MAX;
+        config->download_segments = n;
+    }
     if (cf_e) snprintf(config->curseforge_api_key, sizeof(config->curseforge_api_key), "%s",
         gtk_editable_get_text(GTK_EDITABLE(cf_e)));
     if (auto_s) config->auto_scan_on_start = gtk_switch_get_active(GTK_SWITCH(auto_s));
@@ -185,6 +192,15 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     gtk_widget_set_name(max_bak_s, "settings-spin");
     GtkWidget *r3 = add_labeled_row(content_box, "最大备份数:", max_bak_s);
 
+    GtkWidget *seg_s = gtk_spin_button_new_with_range(DOWNLOAD_SEGMENTS_MIN,
+                                                      DOWNLOAD_SEGMENTS_MAX, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(seg_s), config->download_segments);
+    gtk_widget_set_name(seg_s, "settings-spin");
+    gtk_widget_set_tooltip_text(seg_s,
+        "≥2 MB 的文件按此数量分段并发下载（Modrinth CDN 单连接限速，"
+        "分段越多越快，但过多可能被服务器限流；1 = 单连接）");
+    GtkWidget *r3b = add_labeled_row(content_box, "下载分段数:", seg_s);
+
     GtkWidget *cf_e = gtk_password_entry_new();
     if (config->curseforge_api_key[0])
         gtk_editable_set_text(GTK_EDITABLE(cf_e), config->curseforge_api_key);
@@ -206,6 +222,7 @@ int dialogs_show_settings(GtkWindow *parent, AppConfig *config)
     g_object_set_data(G_OBJECT(dialog), "config", config);
     g_object_set_data(G_OBJECT(dialog), "bak-dir-entry", bak_dir_e);
     g_object_set_data(G_OBJECT(dialog), "max-bak-spin", max_bak_s);
+    g_object_set_data(G_OBJECT(dialog), "segments-spin", seg_s);
     g_object_set_data(G_OBJECT(dialog), "cf-entry", cf_e);
     g_object_set_data(G_OBJECT(dialog), "auto-scan-switch", auto_s);
     g_object_set_data(G_OBJECT(dialog), "backup-switch", backup_s);

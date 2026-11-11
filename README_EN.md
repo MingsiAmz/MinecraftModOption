@@ -14,6 +14,7 @@ A native Windows GUI for managing Minecraft mods, written in **C11 + GTK4**. Sca
 - **Identify** — matches local files by **SHA1** through Modrinth's bulk `/version_files` endpoint, so identification never relies on guessing from file names.
 - **Update detection** — groups mods by loader and calls `/version_files/update` with the instance's Minecraft version, so only genuinely compatible versions are compared.
 - **One-click update** — update selected or update all, with automatic backup before replacement and a configurable retention limit.
+- **Segmented download** — large files are fetched over several parallel range requests (1–128 segments, configurable) to bypass the CDN's per-connection throttle.
 - **Rollback** — lists every historical backup of a mod and restores any of them.
 - **Batch delete** — keep a backup or delete permanently.
 - **Search and filter** — filter by name in real time, or by source platform.
@@ -92,7 +93,8 @@ The status bar shows the active directory, total mod count and how many updates 
     "max_backups": 5,
     "curseforge_api_key": "",
     "auto_scan_on_start": true,
-    "backup_before_update": true
+    "backup_before_update": true,
+    "download_segments": 4
 }
 ```
 
@@ -104,6 +106,7 @@ The status bar shows the active directory, total mod count and how many updates 
 | `curseforge_api_key` | Reserved for CurseForge; detection currently uses Modrinth |
 | `auto_scan_on_start` | Scan automatically at startup |
 | `backup_before_update` | Back up before updating |
+| `download_segments` | Parallel segments for large downloads, `1` = single connection, max `128` (default `4`) |
 
 ---
 

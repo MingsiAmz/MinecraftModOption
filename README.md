@@ -13,7 +13,8 @@
 - **扫描**：直接解析 `.jar` 内的 `fabric.mod.json`、`META-INF/mods.toml`、`mcmod.info`，取出模组名、版本、加载器、对应的 Minecraft 版本。
 - **识别**：用文件 **SHA1** 调用 Modrinth 批量接口 `/version_files`，一次请求识别上百个模组，不依赖文件名猜测。
 - **版本检测**：按加载器分组调用 `/version_files/update`，带上实例的 Minecraft 版本，只比对真正兼容的版本，避免跨版本误报。
-- **一键更新**：更新选中 / 更新全部，下载前后自动备份，备份份数可配置。
+- **一键更新**：更新选中 / 更新全部，多模组并行下载，下载前后自动备份，备份份数可配置。
+- **分段下载**：大文件按「分段数」（1–128，可在设置里调）并发下载，规避 CDN 的单连接限速。
 - **回滚**：列出某个模组的所有历史备份，选择任意一份即可还原。
 - **批量删除**：可选择“先备份再删除”或“彻底删除”。
 - **搜索与筛选**：按名称实时过滤，或按来源平台筛选。
@@ -95,7 +96,8 @@ ninja
     "max_backups": 5,
     "curseforge_api_key": "",
     "auto_scan_on_start": true,
-    "backup_before_update": true
+    "backup_before_update": true,
+    "download_segments": 4
 }
 ```
 
@@ -107,6 +109,7 @@ ninja
 | `curseforge_api_key` | CurseForge API Key（预留字段，当前版本检测以 Modrinth 为主） |
 | `auto_scan_on_start` | 启动后自动扫描 |
 | `backup_before_update` | 更新前自动备份 |
+| `download_segments` | 大文件下载的分段并发数，`1` 表示单连接，最多 `128`（默认 `4`） |
 
 ---
 

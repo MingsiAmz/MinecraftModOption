@@ -35,9 +35,11 @@ int network_post_json(const char *url, const char **headers, const char *json,
  * 下载文件到本地
  * @param url      下载 URL
  * @param filepath 保存路径
+ * @param segments 分段并发数（1=单连接；>1 且文件较大、服务器支持 Range 时
+ *                 分段并发下载，内部上限 128 段）
  * @return 0成功，-1失败
  */
-int network_download(const char *url, const char *filepath);
+int network_download(const char *url, const char *filepath, int segments);
 
 /**
  * 初始化网络模块（全局 curl init）

@@ -17,10 +17,11 @@ typedef struct {
  * @param backup_dir    备份目录
  * @param backup_before 更新前是否备份
  * @param max_backups   最大备份数
+ * @param segments      下载分段并发数（1=单连接）
  * @return 0成功，-1失败
  */
 int updater_update_mod(ModInfo *mod, const char *backup_dir,
-                        bool backup_before, int max_backups);
+                        bool backup_before, int max_backups, int segments);
 
 /**
  * 批量更新多个模组
@@ -33,6 +34,6 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
  */
 void updater_update_batch(int *indices, int count,
                            const char *backup_dir, bool backup_before,
-                           int max_backups, UpdateResult *result);
+                           int max_backups, int segments, UpdateResult *result);
 
 #endif /* UPDATER_H */

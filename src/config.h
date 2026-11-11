@@ -14,7 +14,12 @@ typedef struct {
     char curseforge_api_key[256];// CurseForge API Key
     bool auto_scan_on_start;     // 启动时自动扫描
     bool backup_before_update;   // 更新前自动备份
+    int download_segments;       // 大文件下载的分段并发数（1=不分段，最多 128）
 } AppConfig;
+
+#define DOWNLOAD_SEGMENTS_MIN 1
+#define DOWNLOAD_SEGMENTS_MAX 128
+#define DOWNLOAD_SEGMENTS_DEFAULT 4
 
 /**
  * 加载配置。若不存在则创建默认配置并保存。

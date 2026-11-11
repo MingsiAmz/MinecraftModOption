@@ -164,9 +164,11 @@ int network_post_json(const char *url, const char **headers, const char *json,
 /* Modrinth 的 CDN 对单条连接限速，实测单连接约 90 KB/s，而同时开 4 条
  * 能跑到 560 KB/s，可见瓶颈在「每条连接」而不是总带宽。所以大文件改成
  * 分段并发下载：先探测大小与 Range 支持，再按区间各开一条连接下到临时
- * 分片，最后按顺序拼接。任何一步失败都退回单连接，保证不会写出半个 jar。 */
+ * 分片，最后按顺序拼接。任何一步失败都退回单连接，保证不会写出半个 jar。
+ * 分段数由配置项 download_segments 决定（1..128），上限见 SEG_MAX_PARTS。 */
 #define SEG_MIN_BYTES   (2L * 1024 * 1024)  /* 小于 2MB 不值得分段 */
-#define SEG_MAX_PARTS   4
+#define SEG_MAX_PARTS   128                 /* 上限，与配置项范围一致 */
+#define SEG_MIN_PART    (256L * 1024)       /* 每段至少 256KB，避免切得太碎 */
 #define SEG_COPY_BUF    (64 * 1024)
 
 typedef struct {
@@ -332,9 +334,17 @@ static int concat_segments(SegmentTask *tasks, int parts, const char *dest)
 }
 
 static int download_segmented(const char *url, const char *filepath,
-                              const char *ca_bundle, long long size)
+                              const char *ca_bundle, long long size, int segments)
 {
-    int parts = (size >= 8LL * 1024 * 1024) ? SEG_MAX_PARTS : 2;
+    int parts = segments;
+    if (parts > SEG_MAX_PARTS) parts = SEG_MAX_PARTS;
+    if (parts < 2) return -1;
+    /* 段数不能多到每段只剩几十 KB，那样反而更慢 */
+    if (size / parts < SEG_MIN_PART) {
+        parts = (int)(size / SEG_MIN_PART);
+        if (parts < 2) return -1;
+    }
+    if (parts > SEG_MAX_PARTS) parts = SEG_MAX_PARTS;
 
     SegmentTask *tasks = g_new0(SegmentTask, parts);
     GThread **threads = g_new(GThread *, parts);
@@ -375,15 +385,19 @@ static int download_segmented(const char *url, const char *filepath,
     return 0;
 }
 
-int network_download(const char *url, const char *filepath)
+int network_download(const char *url, const char *filepath, int segments)
 {
     const char *ca_bundle = portable_ca_bundle();
 
-    ProbeInfo info;
-    if (probe_remote(url, ca_bundle, &info) == 0 &&
-        info.supports_ranges && info.size >= SEG_MIN_BYTES) {
-        if (download_segmented(url, filepath, ca_bundle, info.size) == 0)
-            return 0;
+    if (segments < 1) segments = 1;
+
+    if (segments > 1) {
+        ProbeInfo info;
+        if (probe_remote(url, ca_bundle, &info) == 0 &&
+            info.supports_ranges && info.size >= SEG_MIN_BYTES) {
+            if (download_segmented(url, filepath, ca_bundle, info.size, segments) == 0)
+                return 0;
+        }
     }
 
     return download_single(url, filepath, ca_bundle);

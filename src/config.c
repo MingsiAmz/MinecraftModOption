@@ -23,6 +23,7 @@ void config_set_defaults(AppConfig *config)
     config->curseforge_api_key[0] = '\0';
     config->auto_scan_on_start = true;
     config->backup_before_update = true;
+    config->download_segments = DOWNLOAD_SEGMENTS_DEFAULT;
 }
 
 int config_save(const AppConfig *config)
@@ -36,6 +37,7 @@ int config_save(const AppConfig *config)
     cJSON_AddStringToObject(root, "curseforge_api_key", config->curseforge_api_key);
     cJSON_AddBoolToObject(root, "auto_scan_on_start", config->auto_scan_on_start);
     cJSON_AddBoolToObject(root, "backup_before_update", config->backup_before_update);
+    cJSON_AddNumberToObject(root, "download_segments", config->download_segments);
 
     char *json_str = cJSON_Print(root);
     if (!json_str) {
@@ -115,6 +117,12 @@ int config_load(AppConfig *config)
         config->auto_scan_on_start = cJSON_IsTrue(val);
     if ((val = cJSON_GetObjectItem(root, "backup_before_update")) && cJSON_IsBool(val))
         config->backup_before_update = cJSON_IsTrue(val);
+    if ((val = cJSON_GetObjectItem(root, "download_segments")) && cJSON_IsNumber(val)) {
+        int n = val->valueint;
+        if (n < DOWNLOAD_SEGMENTS_MIN) n = DOWNLOAD_SEGMENTS_MIN;
+        if (n > DOWNLOAD_SEGMENTS_MAX) n = DOWNLOAD_SEGMENTS_MAX;
+        config->download_segments = n;
+    }
 
     cJSON_Delete(root);
     ensure_backup_dir(config);

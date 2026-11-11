@@ -110,7 +110,7 @@ static void cleanup_old_backups(const char *backup_dir, const char *mod_name, in
 
 // ─── 更新单个模组 ───
 int updater_update_mod(ModInfo *mod, const char *backup_dir,
-                        bool backup_before, int max_backups)
+                        bool backup_before, int max_backups, int segments)
 {
     // 如果没有最新版本信息，无法更新
     if (mod->latest_version[0] == '\0')
@@ -184,7 +184,7 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
     // 下载到临时文件
     char tmp_file[1024];
     snprintf(tmp_file, sizeof(tmp_file), "%s.download.tmp", mod->file_path);
-    if (network_download(download_url, tmp_file) != 0) {
+    if (network_download(download_url, tmp_file, segments) != 0) {
         remove(tmp_file);
         return -1;
     }
@@ -228,7 +228,7 @@ int updater_update_mod(ModInfo *mod, const char *backup_dir,
 // ─── 批量更新 ───
 void updater_update_batch(int *indices, int count,
                            const char *backup_dir, bool backup_before,
-                           int max_backups, UpdateResult *result)
+                           int max_backups, int segments, UpdateResult *result)
 {
     memset(result, 0, sizeof(UpdateResult));
     result->total = count;
@@ -242,7 +242,7 @@ void updater_update_batch(int *indices, int count,
             continue;
         }
 
-        if (updater_update_mod(mod, backup_dir, backup_before, max_backups) == 0) {
+        if (updater_update_mod(mod, backup_dir, backup_before, max_backups, segments) == 0) {
             result->success++;
         } else {
             result->failed++;

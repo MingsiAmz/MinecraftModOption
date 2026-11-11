@@ -404,7 +404,8 @@ static gpointer update_worker(gpointer userdata)
         ModInfo *mod = mod_list_get(job->data->indices[slot]);
         int rc = mod ? updater_update_mod(mod, state->config.backup_dir,
                         state->config.backup_before_update,
-                        state->config.max_backups) : -1;
+                        state->config.max_backups,
+                        state->config.download_segments) : -1;
 
         g_mutex_lock(&job->lock);
         if (rc == 0) {
