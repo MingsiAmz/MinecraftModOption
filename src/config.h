@@ -5,7 +5,7 @@
 
 #define CONFIG_FILE "config.json"
 #define APP_NAME "Minecraft Mod Manager"
-#define APP_VERSION "1.0.5"
+#define APP_VERSION "1.0.6"
 
 typedef struct {
     char mod_dir[1024];          // 模组目录路径
